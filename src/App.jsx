@@ -608,7 +608,7 @@ function Header({ view, setView, date, setDate, onAdd, syncing, onSync, authed }
   const viewOpts = [{ v: "day", l: "Tag" }, { v: "week", l: "Woche" }, { v: "list", l: "Liste" }]
 
   return (
-    <div style={{ padding: "14px 16px 10px", background: T.surface, borderBottom: `1px solid ${T.border}`, flexShrink: 0, boxShadow: "0 1px 0 rgba(0,0,0,0.04)" }}>
+    <div style={{ padding: "max(14px, env(safe-area-inset-top)) 16px 10px", background: T.surface, borderBottom: `1px solid ${T.border}`, flexShrink: 0, boxShadow: "0 1px 0 rgba(0,0,0,0.04)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
         <div style={{ display: "flex", background: T.subtle, borderRadius: 10, padding: 3 }}>
           {viewOpts.map(({ v, l }) => (
@@ -790,7 +790,7 @@ export default function App() {
         ::-webkit-scrollbar-thumb { background: #D0D8EA; border-radius: 2px; }
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
-      <div style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", background: T.bg, color: T.text, height: "100dvh", maxWidth: 430, margin: "0 auto", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", background: T.bg, color: T.text, height: "100dvh", maxWidth: 430, margin: "0 auto", display: "flex", flexDirection: "column", overflow: "hidden", paddingBottom: "env(safe-area-inset-bottom)" }}>
         <Header view={view} setView={setView} date={date} setDate={setDate}
           onAdd={() => setModal({ task: {} })} syncing={syncing} onSync={doSync} authed={authed} />
         <LabelLegend />
