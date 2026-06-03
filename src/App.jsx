@@ -739,7 +739,7 @@ export default function App() {
       showToast(added > 0 ? `${added} Ereignisse importiert ✓` : "Alles aktuell ✓")
     } catch (e) {
       console.error(e)
-      showToast(e.message === "token_expired" ? "Sitzung abgelaufen – bitte erneut ↻ drücken" : "Sync-Fehler")
+      showToast(e.message || "Sync-Fehler", 8000)
       if (e.message === "token_expired") setAuthed(false)
     }
     setSyncing(false)
