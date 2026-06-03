@@ -680,6 +680,13 @@ export default function App() {
     }
   }, [])
 
+  // Auto-sync alle 30 Minuten wenn Kalender verbunden und authentifiziert
+  useEffect(() => {
+    if (!authed || Object.keys(cals).length === 0) return
+    const id = setInterval(() => doSync(), 30 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [authed, cals])
+
   // Connect calendars: fetch list, then show mapping UI
   const connectCalendars = async () => {
     showToast("Verbinde Google Kalender …", 10000)
