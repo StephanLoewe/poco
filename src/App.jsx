@@ -461,7 +461,7 @@ function WeekView({ tasks, date, onTaskClick, onTimeClick }) {
 }
 
 // ─── ListView ─────────────────────────────────────────────────
-function ListView({ tasks, date, onTaskClick, onAdd }) {
+function ListView({ tasks, date, onTaskClick, onAdd, onToggleDone }) {
   const mon   = getMon(date)
   const days  = Array.from({ length: 7 }, (_, i) => dPlus(mon, i))
   const today = dKey(new Date())
@@ -502,11 +502,11 @@ function ListView({ tasks, date, onTaskClick, onAdd }) {
               </div>
             )}
 
-            {open.map(t => <ListRow key={t.id} task={t} onClick={() => onTaskClick(t)} />)}
+            {open.map(t => <ListRow key={t.id} task={t} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />)}
 
             {done.length > 0 && (
               <div style={{ marginTop: open.length > 0 ? 6 : 0 }}>
-                {done.map(t => <ListRow key={t.id} task={t} onClick={() => onTaskClick(t)} />)}
+                {done.map(t => <ListRow key={t.id} task={t} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />)}
               </div>
             )}
           </div>
@@ -516,7 +516,7 @@ function ListView({ tasks, date, onTaskClick, onAdd }) {
   )
 }
 
-function ListRow({ task, onClick }) {
+function ListRow({ task, onClick, onToggleDone }) {
   const lc   = LC[task.label] || LC.Arbeit
   const pr   = PC[task.priority]
   const en   = eCnf(task.energy)
@@ -531,6 +531,18 @@ function ListRow({ task, onClick }) {
       cursor: "pointer", display: "flex", alignItems: "center", gap: 12,
       opacity: done ? 0.52 : 1, transition: "all 0.15s",
     }}>
+      <div
+        onClick={e => { e.stopPropagation(); onToggleDone() }}
+        style={{
+          width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+          border: `1.5px solid ${done ? lc.c : T.dim}`,
+          background: done ? lc.c : "transparent",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          transition: "all 0.15s",
+        }}
+      >
+        {done && <span style={{ fontSize: 11, color: "white", lineHeight: 1 }}>✓</span>}
+      </div>
       <div style={{ fontSize: 11, color: T.muted, minWidth: 38, textAlign: "right", flexShrink: 0, fontWeight: 500 }}>
         {task.time}
       </div>
@@ -786,6 +798,11 @@ export default function App() {
 
   const handleBudget = (v) => { setBudget(v); store.budget(v) }
 
+  const handleToggleDone = (id) => {
+    const updated = tasks.map(t => t.id === id ? { ...t, status: t.status === "done" ? "open" : "done" } : t)
+    setTasks(updated); store.tasks(updated)
+  }
+
   return (
     <>
       <style>{`
@@ -816,7 +833,8 @@ export default function App() {
         {view === "list" && (
           <ListView tasks={tasks} date={date}
             onTaskClick={t => setModal({ task: t })}
-            onAdd={dk => setModal({ task: { date: dk } })} />
+            onAdd={dk => setModal({ task: { date: dk } })}
+            onToggleDone={handleToggleDone} />
         )}
 
         {modal && <TaskModal task={modal.task} onSave={handleSave} onDelete={handleDelete} onClose={() => setModal(null)} />}
