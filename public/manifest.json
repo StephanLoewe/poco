@@ -2,7 +2,7 @@
   "name": "Structured Planner",
   "short_name": "Planner",
   "description": "Persönlicher Kalender & Energieplaner",
-  "start_url": "/poco/",
+  "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#F4F6FB",
