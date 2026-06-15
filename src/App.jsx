@@ -17,10 +17,10 @@ const COL_W  = 46
 
 const LABELS = ["Arbeit", "Soziales", "Fun", "Tasks"]
 const LC = {
-  Arbeit:   { c: "#2563EB", bg: "rgba(37,99,235,0.07)",   brd: "rgba(37,99,235,0.25)"  },
-  Soziales: { c: "#DB2777", bg: "rgba(219,39,119,0.07)",  brd: "rgba(219,39,119,0.25)" },
-  Fun:      { c: "#059669", bg: "rgba(5,150,105,0.07)",   brd: "rgba(5,150,105,0.25)"  },
-  Tasks:    { c: "#6D28D9", bg: "rgba(109,40,217,0.07)",  brd: "rgba(109,40,217,0.25)" },
+  Arbeit:   { c: "#2563EB", bg: "#E8EEFB", brd: "#BACAF5" },
+  Soziales: { c: "#DB2777", bg: "#FBEAF3", brd: "#F2AACD" },
+  Fun:      { c: "#059669", bg: "#E5F5F0", brd: "#9ED9C5" },
+  Tasks:    { c: "#6D28D9", bg: "#EDE8F9", brd: "#C5B0EF" },
 }
 const PC = {
   P1: { l: "Kritisch", c: "#EF4444" },
