@@ -359,9 +359,7 @@ function NowLine() {
 function HourGrid() {
   return <>
     {Array.from({ length: 24 }, (_, h) => (
-      <div key={h} style={{ position: "absolute", top: h * HOUR_H, left: 0, right: 0, height: HOUR_H, borderTop: `1px solid ${h ? T.border : "transparent"}` }}>
-        <div style={{ position: "absolute", top: HOUR_H / 2, left: 0, right: 0, borderTop: `1px dashed ${T.subtle}` }} />
-      </div>
+      <div key={h} style={{ position: "absolute", top: h * HOUR_H, left: 0, right: 0, height: HOUR_H, borderTop: `1px solid ${h ? T.border : "transparent"}` }} />
     ))}
   </>
 }
@@ -380,10 +378,10 @@ function DayView({ tasks, date, onTaskClick, onTimeClick }) {
   return (
     <div ref={ref} style={{ flex: 1, overflowY: "auto" }}>
       <div style={{ display: "flex", minHeight: 24 * HOUR_H }}>
-        <div style={{ width: COL_W, flexShrink: 0, position: "sticky", left: 0, background: T.bg, zIndex: 5 }}>
+        <div style={{ width: COL_W, flexShrink: 0, position: "sticky", left: 0, background: T.surface, zIndex: 5 }}>
           {Array.from({ length: 24 }, (_, h) => (
-            <div key={h} style={{ height: HOUR_H, display: "flex", alignItems: "flex-start", justifyContent: "flex-end", paddingRight: 10, paddingTop: 5, fontSize: 10, color: T.dim, fontWeight: 500, boxSizing: "border-box" }}>
-              {h ? `${pad(h)}:00` : ""}
+            <div key={h} style={{ position: "absolute", top: h * HOUR_H, right: 0, left: 0, display: "flex", justifyContent: "flex-end", paddingRight: 10, boxSizing: "border-box" }}>
+              {h ? <span style={{ fontSize: 10, color: T.dim, fontWeight: 500, transform: "translateY(-50%)", display: "block", background: T.surface, paddingLeft: 2 }}>{pad(h)}:00</span> : null}
             </div>
           ))}
         </div>
@@ -395,8 +393,8 @@ function DayView({ tasks, date, onTaskClick, onTimeClick }) {
             onTimeClick(`${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`)
           }}>
           <HourGrid />
-          {dayTasks.map(t => <TaskBlock key={t.id} task={t} onClick={e => { e.stopPropagation(); onTaskClick(t) }} />)}
           {isToday && <NowLine />}
+          {dayTasks.map(t => <TaskBlock key={t.id} task={t} onClick={e => { e.stopPropagation(); onTaskClick(t) }} />)}
         </div>
       </div>
     </div>
@@ -429,10 +427,10 @@ function WeekView({ tasks, date, onTaskClick, onTimeClick }) {
         })}
       </div>
       <div ref={ref} style={{ flex: 1, overflowY: "auto", display: "flex" }}>
-        <div style={{ width: COL_W, flexShrink: 0, position: "sticky", left: 0, background: T.bg, zIndex: 5 }}>
+        <div style={{ width: COL_W, flexShrink: 0, position: "sticky", left: 0, background: T.surface, zIndex: 5 }}>
           {Array.from({ length: 24 }, (_, h) => (
-            <div key={h} style={{ height: HOUR_H, display: "flex", alignItems: "flex-start", justifyContent: "flex-end", paddingRight: 8, paddingTop: 5, fontSize: 10, color: T.dim, fontWeight: 500, boxSizing: "border-box" }}>
-              {h ? `${pad(h)}:00` : ""}
+            <div key={h} style={{ position: "absolute", top: h * HOUR_H, right: 0, left: 0, display: "flex", justifyContent: "flex-end", paddingRight: 8, boxSizing: "border-box" }}>
+              {h ? <span style={{ fontSize: 10, color: T.dim, fontWeight: 500, transform: "translateY(-50%)", display: "block", background: T.surface, paddingLeft: 2 }}>{pad(h)}:00</span> : null}
             </div>
           ))}
         </div>
@@ -449,8 +447,8 @@ function WeekView({ tasks, date, onTaskClick, onTimeClick }) {
                   onTimeClick(`${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`, dk)
                 }}>
                 <HourGrid />
-                {dt.map(t => <TaskBlock key={t.id} task={t} onClick={e => { e.stopPropagation(); onTaskClick(t) }} />)}
                 {isT && <NowLine />}
+                {dt.map(t => <TaskBlock key={t.id} task={t} onClick={e => { e.stopPropagation(); onTaskClick(t) }} />)}
               </div>
             )
           })}
