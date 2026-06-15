@@ -605,7 +605,7 @@ function Header({ view, setView, date, setDate, onAdd, syncing, onSync, authed }
     ? date.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" })
     : (() => { const m = getMon(date); const s = dPlus(m, 6); return `${m.getDate()}. ${MON[m.getMonth()]} – ${s.getDate()}. ${MON[s.getMonth()]}` })()
 
-  const viewOpts = [{ v: "day", l: "Tag" }, { v: "week", l: "Woche" }, { v: "list", l: "Liste" }]
+  const viewOpts = [{ v: "list", l: "Liste" }, { v: "day", l: "Tag" }, { v: "week", l: "Woche" }]
 
   return (
     <div style={{ padding: "max(14px, env(safe-area-inset-top)) 16px 10px", background: T.surface, borderBottom: `1px solid ${T.border}`, flexShrink: 0, boxShadow: "0 1px 0 rgba(0,0,0,0.04)" }}>
