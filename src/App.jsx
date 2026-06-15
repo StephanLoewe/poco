@@ -173,8 +173,8 @@ function CalendarMapModal({ googleCals, onSave, onSkip }) {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(15,25,55,0.4)", backdropFilter: "blur(10px)", zIndex: 999, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div style={{ background: "#fff", borderRadius: "22px 22px 0 0", width: "100%", maxWidth: 430, padding: "24px 20px 44px", boxShadow: "0 -8px 40px rgba(0,0,0,0.12)" }}>
+    <div onClick={onSkip} style={{ position: "fixed", inset: 0, background: "rgba(15,25,55,0.4)", backdropFilter: "blur(10px)", zIndex: 999, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: "22px 22px 0 0", width: "100%", maxWidth: 430, padding: "24px 20px 44px", boxShadow: "0 -8px 40px rgba(0,0,0,0.12)" }}>
         <div style={{ width: 36, height: 4, background: "#C8D2E4", borderRadius: 2, margin: "0 auto 20px" }} />
         <div style={{ fontSize: 15, fontWeight: 700, color: "#1A2340", marginBottom: 4 }}>Google Kalender zuordnen</div>
         <div style={{ fontSize: 12, color: "#8896B3", marginBottom: 20 }}>Welcher Google-Kalender gehört zu welchem Label?</div>
@@ -233,8 +233,8 @@ function TaskModal({ task, onSave, onDelete, onClose }) {
   })
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(15,25,55,0.35)", backdropFilter: "blur(10px)", zIndex: 999, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div style={{ background: T.surface, borderRadius: "22px 22px 0 0", width: "100%", maxWidth: 430, padding: "20px 20px 44px", maxHeight: "92vh", overflowY: "auto", boxShadow: "0 -8px 40px rgba(0,0,0,0.12)" }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,25,55,0.35)", backdropFilter: "blur(10px)", zIndex: 999, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: T.surface, borderRadius: "22px 22px 0 0", width: "100%", maxWidth: 430, padding: "20px 20px 44px", maxHeight: "92vh", overflowY: "auto", boxShadow: "0 -8px 40px rgba(0,0,0,0.12)" }}>
         <div style={{ width: 36, height: 4, background: T.dim, borderRadius: 2, margin: "0 auto 18px" }} />
 
         <input value={f.title} onChange={e => set("title", e.target.value)}
