@@ -757,16 +757,10 @@ function Header({ view, setView, date, setDate, onAdd, syncing, onSync, authed }
             }}>{l}</button>
           ))}
         </div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <button onClick={onSync} disabled={syncing} title={authed ? "Sync mit Google Kalender" : "Mit Google Kalender verbinden"}
-            style={{ width: 34, height: 34, borderRadius: 10, border: `1px solid ${authed ? T.border : "rgba(37,99,235,0.3)"}`, background: authed ? T.surface : "rgba(37,99,235,0.06)", color: syncing ? "#2563EB" : authed ? T.muted : "#2563EB", cursor: syncing ? "default" : "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", animation: syncing ? "spin 1s linear infinite" : "none" }}>
-            ↻
-          </button>
-          <button onClick={onAdd}
-            style={{ width: 34, height: 34, borderRadius: 10, border: "none", background: "#2563EB", color: "white", cursor: "pointer", fontSize: 20, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 300, boxShadow: "0 2px 8px rgba(37,99,235,0.3)" }}>
-            +
-          </button>
-        </div>
+        <button onClick={onSync} disabled={syncing} title={authed ? "Sync mit Google Kalender" : "Mit Google Kalender verbinden"}
+          style={{ width: 34, height: 34, borderRadius: 10, border: `1px solid ${authed ? T.border : "rgba(37,99,235,0.3)"}`, background: authed ? T.surface : "rgba(37,99,235,0.06)", color: syncing ? "#2563EB" : authed ? T.muted : "#2563EB", cursor: syncing ? "default" : "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", animation: syncing ? "spin 1s linear infinite" : "none" }}>
+          ↻
+        </button>
       </div>
       {view !== "inbox" && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -983,6 +977,20 @@ export default function App() {
         {modal && <TaskModal task={modal.task} onSave={handleSave} onDelete={handleDelete} onClose={() => setModal(null)} />}
         {calPicker && <CalendarMapModal googleCals={calPicker.list} onSave={handleCalMapSave} onSkip={handleCalMapSkip} />}
         <Toast msg={toast} />
+
+        <button
+          onClick={() => setModal({ task: view === "inbox" ? { date: "" } : {} })}
+          style={{
+            position: "fixed", bottom: `calc(24px + env(safe-area-inset-bottom))`, right: 20,
+            width: 56, height: 56, borderRadius: 28,
+            border: "none", background: "#2563EB", color: "white",
+            fontSize: 28, fontWeight: 300, lineHeight: 1,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 4px 16px rgba(37,99,235,0.45)",
+            cursor: "pointer", zIndex: 100,
+          }}>
+          +
+        </button>
       </div>
     </>
   )
