@@ -612,6 +612,82 @@ function ListRow({ task, onClick, onToggleDone }) {
   )
 }
 
+// ─── InboxView ────────────────────────────────────────────────
+function InboxView({ tasks, onTaskClick, onAdd }) {
+  const [input, setInput] = useState("")
+  const inboxTasks = tasks.filter(t => !t.date)
+  const open = inboxTasks.filter(t => t.status !== "done")
+  const done = inboxTasks.filter(t => t.status === "done")
+
+  const handleAdd = () => {
+    const title = input.trim()
+    if (!title) return
+    onAdd({ title, date: "", time: nowT(), duration: 30, label: "Arbeit", priority: "P3", energy: 0, status: "open" })
+    setInput("")
+  }
+
+  return (
+    <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+      {/* Quick capture */}
+      <div style={{ padding: "12px 16px", background: T.surface, borderBottom: `1px solid ${T.border}`, display: "flex", gap: 8 }}>
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && handleAdd()}
+          placeholder="Schnell erfassen …"
+          style={{ flex: 1, background: T.subtle, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 14px", fontSize: 14, color: T.text, fontFamily: "inherit", outline: "none" }}
+        />
+        <button onClick={handleAdd} style={{ width: 40, height: 40, borderRadius: 10, border: "none", background: input.trim() ? "#2563EB" : T.subtle, color: input.trim() ? "white" : T.dim, cursor: input.trim() ? "pointer" : "default", fontSize: 20, flexShrink: 0, transition: "all 0.15s" }}>+</button>
+      </div>
+
+      <div style={{ flex: 1, padding: "14px 16px 32px" }}>
+        {inboxTasks.length === 0 && (
+          <div style={{ textAlign: "center", padding: "48px 0" }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>📥</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: T.muted }}>Inbox ist leer</div>
+            <div style={{ fontSize: 12, color: T.dim, marginTop: 4 }}>Erfasse Aufgaben oben — Datum später zuordnen</div>
+          </div>
+        )}
+
+        {open.map(t => <InboxRow key={t.id} task={t} onClick={() => onTaskClick(t)} />)}
+
+        {done.length > 0 && (
+          <>
+            <div style={{ fontSize: 10, color: T.dim, textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 18, marginBottom: 8 }}>Erledigt</div>
+            {done.map(t => <InboxRow key={t.id} task={t} onClick={() => onTaskClick(t)} />)}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function InboxRow({ task, onClick }) {
+  const lc   = LC[task.label] || LC.Arbeit
+  const pr   = PC[task.priority]
+  const done = task.status === "done"
+
+  return (
+    <div onClick={onClick} style={{
+      background: T.surface, borderRadius: 12,
+      border: `1px solid ${done ? T.border : lc.brd}`,
+      borderLeft: `3px solid ${done ? T.dim : lc.c}`,
+      padding: "11px 14px", marginBottom: 6,
+      cursor: "pointer", display: "flex", alignItems: "center", gap: 10,
+      opacity: done ? 0.52 : 1, transition: "all 0.15s",
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: done ? T.dim : T.text, textDecoration: done ? "line-through" : "none", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+          {task.title}
+        </div>
+        <div style={{ fontSize: 11, color: lc.c, fontWeight: 500, marginTop: 2 }}>{task.label}</div>
+      </div>
+      <div style={{ fontSize: 10, fontWeight: 700, color: pr.c, flexShrink: 0 }}>{task.priority}</div>
+      <div style={{ fontSize: 11, color: T.dim, flexShrink: 0 }}>→ Datum</div>
+    </div>
+  )
+}
+
 // ─── EnergyBar ────────────────────────────────────────────────
 function EnergyBar({ tasks, date, budget, onBudgetChange }) {
   const dk   = dKey(date)
@@ -665,7 +741,7 @@ function Header({ view, setView, date, setDate, onAdd, syncing, onSync, authed }
     ? date.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" })
     : (() => { const m = getMon(date); const s = dPlus(m, 6); return `${m.getDate()}. ${MON[m.getMonth()]} – ${s.getDate()}. ${MON[s.getMonth()]}` })()
 
-  const viewOpts = [{ v: "list", l: "Liste" }, { v: "day", l: "Tag" }, { v: "week", l: "Woche" }]
+  const viewOpts = [{ v: "inbox", l: "Inbox" }, { v: "list", l: "Liste" }, { v: "day", l: "Tag" }, { v: "week", l: "Woche" }]
 
   return (
     <div style={{ padding: "max(14px, env(safe-area-inset-top)) 16px 10px", background: T.surface, borderBottom: `1px solid ${T.border}`, flexShrink: 0, boxShadow: "0 1px 0 rgba(0,0,0,0.04)" }}>
@@ -673,7 +749,7 @@ function Header({ view, setView, date, setDate, onAdd, syncing, onSync, authed }
         <div style={{ display: "flex", background: T.subtle, borderRadius: 10, padding: 3 }}>
           {viewOpts.map(({ v, l }) => (
             <button key={v} onClick={() => setView(v)} style={{
-              padding: "5px 12px", borderRadius: 7, border: "none", cursor: "pointer", fontFamily: "inherit",
+              padding: "5px 9px", borderRadius: 7, border: "none", cursor: "pointer", fontFamily: "inherit",
               fontSize: 12, fontWeight: 500, transition: "all 0.15s",
               background: view === v ? T.surface : "transparent",
               color: view === v ? "#2563EB" : T.muted,
@@ -692,14 +768,16 @@ function Header({ view, setView, date, setDate, onAdd, syncing, onSync, authed }
           </button>
         </div>
       </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <button onClick={() => nav(-1)} style={{ background: "transparent", border: "none", color: T.muted, cursor: "pointer", fontSize: 20, padding: "2px 8px", lineHeight: 1 }}>‹</button>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: isToday ? "#2563EB" : T.text, lineHeight: 1.3 }}>{title}</div>
-          {!isToday && <button onClick={() => setDate(new Date())} style={{ fontSize: 10, color: "#2563EB", background: "transparent", border: "none", cursor: "pointer", marginTop: 2, fontFamily: "inherit", padding: 0 }}>→ Heute</button>}
+      {view !== "inbox" && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <button onClick={() => nav(-1)} style={{ background: "transparent", border: "none", color: T.muted, cursor: "pointer", fontSize: 20, padding: "2px 8px", lineHeight: 1 }}>‹</button>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: isToday ? "#2563EB" : T.text, lineHeight: 1.3 }}>{title}</div>
+            {!isToday && <button onClick={() => setDate(new Date())} style={{ fontSize: 10, color: "#2563EB", background: "transparent", border: "none", cursor: "pointer", marginTop: 2, fontFamily: "inherit", padding: 0 }}>→ Heute</button>}
+          </div>
+          <button onClick={() => nav(1)} style={{ background: "transparent", border: "none", color: T.muted, cursor: "pointer", fontSize: 20, padding: "2px 8px", lineHeight: 1 }}>›</button>
         </div>
-        <button onClick={() => nav(1)} style={{ background: "transparent", border: "none", color: T.muted, cursor: "pointer", fontSize: 20, padding: "2px 8px", lineHeight: 1 }}>›</button>
-      </div>
+      )}
     </div>
   )
 }
@@ -821,7 +899,7 @@ export default function App() {
     const existing = tasks.find(t => t.id === f.id)
     let gcalId = f.gcalId
     const calId = cals[f.label]
-    if (calId && authed) {
+    if (calId && authed && f.date) {
       const s = `${f.date}T${f.time}:00`
       const e = `${f.date}T${eAdd(f.time, f.duration)}:00`
       try {
@@ -869,10 +947,18 @@ export default function App() {
       `}</style>
       <div style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", background: T.bg, color: T.text, height: "100dvh", maxWidth: 430, margin: "0 auto", display: "flex", flexDirection: "column", overflow: "hidden", paddingBottom: "env(safe-area-inset-bottom)" }}>
         <Header view={view} setView={setView} date={date} setDate={setDate}
-          onAdd={() => setModal({ task: {} })} syncing={syncing} onSync={doSync} authed={authed} />
-        <LabelLegend />
-        <EnergyBar tasks={tasks} date={date} budget={budget} onBudgetChange={handleBudget} />
+          onAdd={() => setModal({ task: view === "inbox" ? { date: "" } : {} })} syncing={syncing} onSync={doSync} authed={authed} />
+        {view !== "inbox" && <LabelLegend />}
+        {view !== "inbox" && <EnergyBar tasks={tasks} date={date} budget={budget} onBudgetChange={handleBudget} />}
 
+        {view === "inbox" && (
+          <InboxView tasks={tasks}
+            onTaskClick={t => setModal({ task: t })}
+            onAdd={partial => {
+              const t = { id: uid(), priority: "P3", energy: 0, status: "open", duration: 30, label: "Arbeit", time: nowT(), ...partial }
+              const updated = [...tasks, t]; setTasks(updated); store.tasks(updated)
+            }} />
+        )}
         {view === "day" && (
           <DayView tasks={tasks} date={date}
             onTaskClick={t => setModal({ task: t })}
