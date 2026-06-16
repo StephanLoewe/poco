@@ -818,10 +818,12 @@ export default function App() {
     }
   }, [])
 
-  // Auto-sync alle 30 Minuten wenn Kalender verbunden und authentifiziert
+  // Auto-sync alle 30 Minuten — ref statt Closure, damit immer die aktuelle doSync gilt
+  const doSyncRef = useRef(null)
+  useEffect(() => { doSyncRef.current = doSync })
   useEffect(() => {
     if (!authed || Object.keys(cals).length === 0) return
-    const id = setInterval(() => doSync(), 30 * 60 * 1000)
+    const id = setInterval(() => doSyncRef.current?.(), 30 * 60 * 1000)
     return () => clearInterval(id)
   }, [authed, cals])
 
@@ -863,7 +865,9 @@ export default function App() {
 
       showToast("Synchronisiere …", 15000)
       const mon = getMon(date); const end = dPlus(mon, 7)
-      const current = [...tasks]; let added = 0
+      // Read fresh from localStorage to avoid stale React closure — status changes
+      // (done/open) are always persisted there immediately, so this is the source of truth.
+      const current = [...store.load().tasks]; let added = 0
 
       for (const [lbl, id] of Object.entries(calMap)) {
         if (!id) continue
