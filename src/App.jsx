@@ -366,35 +366,52 @@ function HourGrid() {
 
 // ─── DayView ──────────────────────────────────────────────────
 function DayView({ tasks, date, onTaskClick, onTimeClick }) {
-  const ref      = useRef()
-  const dk       = dKey(date)
-  const isToday  = dKey(new Date()) === dk
-  const dayTasks = tasks.filter(t => t.date === dk)
+  const ref        = useRef()
+  const dk         = dKey(date)
+  const isToday    = dKey(new Date()) === dk
+  const allTasks   = tasks.filter(t => t.date === dk)
+  const allDayTask = allTasks.filter(t => t.allDay)
+  const timedTasks = allTasks.filter(t => !t.allDay)
 
   useEffect(() => {
     if (ref.current) ref.current.scrollTop = isToday ? Math.max(0, tPx(nowT()) - 100) : tPx("07:30")
   }, [dk])
 
   return (
-    <div ref={ref} style={{ flex: 1, overflowY: "auto" }}>
-      <div style={{ display: "flex", minHeight: 24 * HOUR_H }}>
-        <div style={{ width: COL_W, flexShrink: 0, position: "sticky", left: 0, background: T.surface, zIndex: 5 }}>
-          {Array.from({ length: 24 }, (_, h) => (
-            <div key={h} style={{ position: "absolute", top: h * HOUR_H, right: 0, left: 0, display: "flex", justifyContent: "flex-end", paddingRight: 10, boxSizing: "border-box" }}>
-              {h ? <span style={{ fontSize: 10, color: T.dim, fontWeight: 500, transform: "translateY(-50%)", display: "block", background: T.surface, paddingLeft: 2 }}>{pad(h)}:00</span> : null}
-            </div>
-          ))}
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {allDayTask.length > 0 && (
+        <div style={{ background: T.surface, borderBottom: `1px solid ${T.border}`, padding: "6px 8px 6px", display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 9, color: T.muted, textTransform: "uppercase", letterSpacing: "0.08em", alignSelf: "center", minWidth: COL_W - 8, textAlign: "right", paddingRight: 6 }}>Ganztag</span>
+          {allDayTask.map(t => {
+            const lc = LC[t.label] || LC.Arbeit
+            return (
+              <div key={t.id} onClick={() => onTaskClick(t)} style={{ fontSize: 11, fontWeight: 600, color: lc.c, background: lc.bg, border: `1px solid ${lc.brd}`, borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>
+                {t.title}
+              </div>
+            )
+          })}
         </div>
-        <div style={{ flex: 1, position: "relative", background: T.surface, borderLeft: `1px solid ${T.border}` }}
-          onClick={e => {
-            const r = e.currentTarget.getBoundingClientRect()
-            const y = e.clientY - r.top + (ref.current?.scrollTop || 0)
-            const m = Math.round((y / HOUR_H) * 60 / 15) * 15
-            onTimeClick(`${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`)
-          }}>
-          <HourGrid />
-          {isToday && <NowLine />}
-          {dayTasks.map(t => <TaskBlock key={t.id} task={t} onClick={e => { e.stopPropagation(); onTaskClick(t) }} />)}
+      )}
+      <div ref={ref} style={{ flex: 1, overflowY: "auto" }}>
+        <div style={{ display: "flex", minHeight: 24 * HOUR_H }}>
+          <div style={{ width: COL_W, flexShrink: 0, position: "sticky", left: 0, background: T.surface, zIndex: 5 }}>
+            {Array.from({ length: 24 }, (_, h) => (
+              <div key={h} style={{ position: "absolute", top: h * HOUR_H, right: 0, left: 0, display: "flex", justifyContent: "flex-end", paddingRight: 10, boxSizing: "border-box" }}>
+                {h ? <span style={{ fontSize: 10, color: T.dim, fontWeight: 500, transform: "translateY(-50%)", display: "block", background: T.surface, paddingLeft: 2 }}>{pad(h)}:00</span> : null}
+              </div>
+            ))}
+          </div>
+          <div style={{ flex: 1, position: "relative", background: T.surface, borderLeft: `1px solid ${T.border}` }}
+            onClick={e => {
+              const r = e.currentTarget.getBoundingClientRect()
+              const y = e.clientY - r.top + (ref.current?.scrollTop || 0)
+              const m = Math.round((y / HOUR_H) * 60 / 15) * 15
+              onTimeClick(`${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`)
+            }}>
+            <HourGrid />
+            {isToday && <NowLine />}
+            {timedTasks.map(t => <TaskBlock key={t.id} task={t} onClick={e => { e.stopPropagation(); onTaskClick(t) }} />)}
+          </div>
         </div>
       </div>
     </div>
@@ -432,6 +449,31 @@ function WeekView({ tasks, date, onTaskClick, onTimeClick }) {
           })}
         </div>
 
+        {/* All-day events row */}
+        {days.some(d => tasks.some(t => t.date === dKey(d) && t.allDay)) && (
+          <div style={{ display: "flex", background: T.subtle, borderBottom: `1px solid ${T.border}`, flexShrink: 0, minWidth: COL_W + DAY_W * 7 }}>
+            <div style={{ width: COL_W, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 6 }}>
+              <span style={{ fontSize: 9, color: T.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Ganztag</span>
+            </div>
+            {days.map(d => {
+              const dk = dKey(d)
+              const allDayHere = tasks.filter(t => t.date === dk && t.allDay)
+              return (
+                <div key={dk} style={{ width: DAY_W, flexShrink: 0, borderLeft: `1px solid ${T.border}`, padding: "3px 4px", display: "flex", flexDirection: "column", gap: 2 }}>
+                  {allDayHere.map(t => {
+                    const lc = LC[t.label] || LC.Arbeit
+                    return (
+                      <div key={t.id} onClick={() => onTaskClick(t)} style={{ fontSize: 10, fontWeight: 600, color: lc.c, background: lc.bg, border: `1px solid ${lc.brd}`, borderRadius: 4, padding: "2px 5px", cursor: "pointer", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                        {t.title}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
         {/* Vertical scroll for timeline */}
         <div ref={ref} style={{ flex: 1, overflowY: "auto", overflowX: "visible", display: "flex", minWidth: COL_W + DAY_W * 7 }}>
           <div style={{ width: COL_W, flexShrink: 0, position: "sticky", left: 0, background: T.surface, zIndex: 5 }}>
@@ -444,7 +486,7 @@ function WeekView({ tasks, date, onTaskClick, onTimeClick }) {
           <div style={{ display: "flex", minHeight: 24 * HOUR_H, background: T.surface }}>
             {days.map(d => {
               const dk = dKey(d); const isT = dk === today
-              const dt = tasks.filter(t => t.date === dk)
+              const dt = tasks.filter(t => t.date === dk && !t.allDay)
               return (
                 <div key={dk} style={{ width: DAY_W, flexShrink: 0, position: "relative", borderLeft: `1px solid ${T.border}` }}
                   onClick={e => {
@@ -751,11 +793,16 @@ export default function App() {
         if (!Array.isArray(evs)) continue
         for (const ev of evs) {
           if (current.find(t => t.gcalId === ev.id)) continue
-          const s = new Date(ev.start?.dateTime || ev.start?.date)
-          const e = new Date(ev.end?.dateTime   || ev.end?.date)
+          const isAllDay = !ev.start?.dateTime
+          const s = isAllDay
+            ? new Date(ev.start.date + "T00:00:00") // parse as local time
+            : new Date(ev.start.dateTime)
+          const e = isAllDay
+            ? new Date(ev.end.date + "T00:00:00")
+            : new Date(ev.end.dateTime)
           const rawDur = Math.round((e - s) / 60000)
           const dur    = DURS.reduce((p, c) => Math.abs(c - rawDur) < Math.abs(p - rawDur) ? c : p)
-          current.push({ id: uid(), title: ev.summary || "Unbenannt", date: dKey(s), time: `${pad(s.getHours())}:${pad(s.getMinutes())}`, duration: dur, label: lbl, priority: "P3", energy: 0, status: "open", gcalId: ev.id })
+          current.push({ id: uid(), title: ev.summary || "Unbenannt", date: dKey(s), time: `${pad(s.getHours())}:${pad(s.getMinutes())}`, duration: dur, label: lbl, priority: "P3", energy: 0, status: "open", gcalId: ev.id, allDay: isAllDay || undefined })
           added++
         }
       }
