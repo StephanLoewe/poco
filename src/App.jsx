@@ -408,50 +408,58 @@ function WeekView({ tasks, date, onTaskClick, onTimeClick }) {
   const days  = Array.from({ length: 7 }, (_, i) => dPlus(mon, i))
   const today = dKey(new Date())
 
+  const DAY_W = 110 // fixed column width → 3 columns fill ~390px, rest scrolls
+
   useEffect(() => { if (ref.current) ref.current.scrollTop = tPx("07:30") }, [])
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      <div style={{ display: "flex", background: T.surface, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
-        <div style={{ width: COL_W, flexShrink: 0 }} />
-        {days.map(d => {
-          const dk = dKey(d); const isT = dk === today
-          return (
-            <div key={dk} style={{ flex: 1, textAlign: "center", padding: "8px 2px", borderLeft: `1px solid ${T.border}` }}>
-              <div style={{ fontSize: 9, color: T.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>{WDAY[d.getDay()]}</div>
-              <div style={{ fontSize: 13, fontWeight: 700, marginTop: 2, width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "3px auto 0", background: isT ? "#2563EB" : "transparent", color: isT ? "white" : T.text }}>
-                {d.getDate()}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-      <div ref={ref} style={{ flex: 1, overflowY: "auto", display: "flex" }}>
-        <div style={{ width: COL_W, flexShrink: 0, position: "sticky", left: 0, background: T.surface, zIndex: 5 }}>
-          {Array.from({ length: 24 }, (_, h) => (
-            <div key={h} style={{ position: "absolute", top: h * HOUR_H, right: 0, left: 0, display: "flex", justifyContent: "flex-end", paddingRight: 8, boxSizing: "border-box" }}>
-              {h ? <span style={{ fontSize: 10, color: T.dim, fontWeight: 500, transform: "translateY(-50%)", display: "block", background: T.surface, paddingLeft: 2 }}>{pad(h)}:00</span> : null}
-            </div>
-          ))}
-        </div>
-        <div style={{ flex: 1, display: "flex", minHeight: 24 * HOUR_H, background: T.surface }}>
+      {/* Horizontally scrollable wrapper for header + grid together */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflowX: "auto", overflowY: "hidden" }}>
+        {/* Day header row — scrolls horizontally with the grid */}
+        <div style={{ display: "flex", background: T.surface, borderBottom: `1px solid ${T.border}`, flexShrink: 0, minWidth: COL_W + DAY_W * 7 }}>
+          <div style={{ width: COL_W, flexShrink: 0 }} />
           {days.map(d => {
             const dk = dKey(d); const isT = dk === today
-            const dt = tasks.filter(t => t.date === dk)
             return (
-              <div key={dk} style={{ flex: 1, position: "relative", borderLeft: `1px solid ${T.border}` }}
-                onClick={e => {
-                  const r = e.currentTarget.getBoundingClientRect()
-                  const y = e.clientY - r.top + (ref.current?.scrollTop || 0)
-                  const m = Math.round((y / HOUR_H) * 60 / 15) * 15
-                  onTimeClick(`${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`, dk)
-                }}>
-                <HourGrid />
-                {isT && <NowLine />}
-                {dt.map(t => <TaskBlock key={t.id} task={t} onClick={e => { e.stopPropagation(); onTaskClick(t) }} />)}
+              <div key={dk} style={{ width: DAY_W, flexShrink: 0, textAlign: "center", padding: "8px 2px", borderLeft: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: 9, color: T.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>{WDAY[d.getDay()]}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "3px auto 0", background: isT ? "#2563EB" : "transparent", color: isT ? "white" : T.text }}>
+                  {d.getDate()}
+                </div>
               </div>
             )
           })}
+        </div>
+
+        {/* Vertical scroll for timeline */}
+        <div ref={ref} style={{ flex: 1, overflowY: "auto", overflowX: "visible", display: "flex", minWidth: COL_W + DAY_W * 7 }}>
+          <div style={{ width: COL_W, flexShrink: 0, position: "sticky", left: 0, background: T.surface, zIndex: 5 }}>
+            {Array.from({ length: 24 }, (_, h) => (
+              <div key={h} style={{ position: "absolute", top: h * HOUR_H, right: 0, left: 0, display: "flex", justifyContent: "flex-end", paddingRight: 8, boxSizing: "border-box" }}>
+                {h ? <span style={{ fontSize: 10, color: T.dim, fontWeight: 500, transform: "translateY(-50%)", display: "block", background: T.surface, paddingLeft: 2 }}>{pad(h)}:00</span> : null}
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", minHeight: 24 * HOUR_H, background: T.surface }}>
+            {days.map(d => {
+              const dk = dKey(d); const isT = dk === today
+              const dt = tasks.filter(t => t.date === dk)
+              return (
+                <div key={dk} style={{ width: DAY_W, flexShrink: 0, position: "relative", borderLeft: `1px solid ${T.border}` }}
+                  onClick={e => {
+                    const r = e.currentTarget.getBoundingClientRect()
+                    const y = e.clientY - r.top + (ref.current?.scrollTop || 0)
+                    const m = Math.round((y / HOUR_H) * 60 / 15) * 15
+                    onTimeClick(`${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`, dk)
+                  }}>
+                  <HourGrid />
+                  {isT && <NowLine />}
+                  {dt.map(t => <TaskBlock key={t.id} task={t} onClick={e => { e.stopPropagation(); onTaskClick(t) }} />)}
+                </div>
+              )
+            })}
+          </div>
         </div>
       </div>
     </div>
