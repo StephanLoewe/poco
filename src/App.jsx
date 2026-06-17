@@ -806,7 +806,9 @@ export default function App() {
     setTasks(t); setBudget(b)
     if (Object.keys(c).length > 0) {
       setCals(c)
-      showToast("Kalender geladen ✓", 2000)
+      showToast("Kalender wird synchronisiert …", 3000)
+      // Auto-sync on startup: delay so GIS script is loaded and doSyncRef is set
+      setTimeout(() => doSyncRef.current?.(), 1500)
     } else {
       showToast("↻ drücken um Google Kalender zu verbinden", 5000)
     }
