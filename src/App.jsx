@@ -43,7 +43,7 @@ const MON  = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov"
 // ─── Helpers ──────────────────────────────────────────────────
 const uid   = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 const pad   = (n) => String(n).padStart(2, "0")
-const dKey  = (d) => new Date(d).toISOString().slice(0, 10)
+const dKey  = (d) => { const dt = new Date(d); return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}` }
 const nowT  = () => { const n = new Date(); return `${pad(n.getHours())}:${pad(n.getMinutes())}` }
 const tPx   = (t) => { if (!t) return 0; const [h, m] = t.split(":").map(Number); return (h + m / 60) * HOUR_H }
 const dPx   = (m) => Math.max(22, (m / 60) * HOUR_H)
