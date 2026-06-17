@@ -817,6 +817,7 @@ export default function App() {
   useEffect(() => { doSyncRef.current = doSync })
   useEffect(() => {
     if (!authed || Object.keys(cals).length === 0) return
+    doSyncRef.current?.()
     const id = setInterval(() => doSyncRef.current?.(), 30 * 60 * 1000)
     return () => clearInterval(id)
   }, [authed, cals])
