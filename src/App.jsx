@@ -35,8 +35,8 @@ const EC = [
   { v:  2, icon: "▸▸", l: "Anstrengend",       c: "#EA580C" },
   { v:  3, icon: "▸▸▸",l: "Sehr anstrengend",  c: "#DC2626" },
 ]
-const DURS = [2, 15, 30, 45, 60, 90]
-const DL   = { 2:"2min", 15:"15min", 30:"30min", 45:"45min", 60:"1h", 90:"1.5h" }
+const DURS = [2, 15, 30, 45, 60, 90, 120, 150, 180, 240]
+const DL   = { 2:"2min", 15:"15min", 30:"30min", 45:"45min", 60:"1h", 90:"1.5h", 120:"2h", 150:"2.5h", 180:"3h", 240:"4h" }
 const WDAY = ["So","Mo","Di","Mi","Do","Fr","Sa"]
 const MON  = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"]
 
@@ -885,7 +885,7 @@ export default function App() {
             ? new Date(ev.end.date + "T00:00:00")
             : new Date(ev.end.dateTime)
           const rawDur = Math.round((e - s) / 60000)
-          const dur    = DURS.reduce((p, c) => Math.abs(c - rawDur) < Math.abs(p - rawDur) ? c : p)
+          const dur    = rawDur > 240 ? rawDur : DURS.reduce((p, c) => Math.abs(c - rawDur) < Math.abs(p - rawDur) ? c : p)
           const newDate = dKey(s)
           const newTime = `${pad(s.getHours())}:${pad(s.getMinutes())}`
           const newTitle = ev.summary || "Unbenannt"
