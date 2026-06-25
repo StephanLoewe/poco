@@ -117,9 +117,14 @@ const gCals = () => withAuth(async () => {
 })
 
 const gEvents = (id, a, b) => withAuth(async () => {
-  const p = new URLSearchParams({ timeMin: a, timeMax: b, singleEvents: "true", maxResults: "250" })
-  const d = await calApi("GET", `/calendars/${encodeURIComponent(id)}/events?${p}`)
-  return (d.items || []).map(e => ({ id: e.id, summary: e.summary, start: e.start, end: e.end }))
+  const p = new URLSearchParams({ timeMin: a, timeMax: b, singleEvents: "true", maxResults: "250", eventTypes: "default", })
+  const pFocus = new URLSearchParams({ timeMin: a, timeMax: b, singleEvents: "true", maxResults: "250", eventTypes: "focusTime", })
+  const [d, df] = await Promise.all([
+    calApi("GET", `/calendars/${encodeURIComponent(id)}/events?${p}`),
+    calApi("GET", `/calendars/${encodeURIComponent(id)}/events?${pFocus}`),
+  ])
+  const items = [...(d.items || []), ...(df.items || [])]
+  return items.map(e => ({ id: e.id, summary: e.summary || (e.eventType === "focusTime" ? "Fokuszeit" : "Unbenannt"), start: e.start, end: e.end, eventType: e.eventType }))
 })
 
 const gCreate = (id, title, s, e) => withAuth(() =>
