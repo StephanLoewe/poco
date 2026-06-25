@@ -861,33 +861,50 @@ export default function App() {
       }
 
       showToast("Synchronisiere …", 15000)
-      const mon = getMon(date); const end = dPlus(mon, 7)
-      // Read fresh from localStorage to avoid stale React closure — status changes
-      // (done/open) are always persisted there immediately, so this is the source of truth.
-      const current = [...store.load().tasks]; let added = 0
+      // ±2 Wochen um heute
+      const winStart = dPlus(getMon(new Date()), -14)
+      const winEnd   = dPlus(getMon(new Date()),  21)
+      // Read fresh from localStorage to avoid stale React closure
+      const current = [...store.load().tasks]; let added = 0; let updated = 0
 
       for (const [lbl, id] of Object.entries(calMap)) {
         if (!id) continue
-        const evs = await gEvents(id, mon.toISOString(), end.toISOString())
+        const evs = await gEvents(id, winStart.toISOString(), winEnd.toISOString())
         if (!Array.isArray(evs)) continue
         for (const ev of evs) {
-          if (current.find(t => t.gcalId === ev.id)) continue
           const isAllDay = !ev.start?.dateTime
           const s = isAllDay
-            ? new Date(ev.start.date + "T00:00:00") // parse as local time
+            ? new Date(ev.start.date + "T00:00:00")
             : new Date(ev.start.dateTime)
           const e = isAllDay
             ? new Date(ev.end.date + "T00:00:00")
             : new Date(ev.end.dateTime)
           const rawDur = Math.round((e - s) / 60000)
           const dur    = DURS.reduce((p, c) => Math.abs(c - rawDur) < Math.abs(p - rawDur) ? c : p)
-          current.push({ id: uid(), title: ev.summary || "Unbenannt", date: dKey(s), time: `${pad(s.getHours())}:${pad(s.getMinutes())}`, duration: dur, label: lbl, priority: "P3", energy: 0, status: "open", gcalId: ev.id, allDay: isAllDay || undefined })
-          added++
+          const newDate = dKey(s)
+          const newTime = `${pad(s.getHours())}:${pad(s.getMinutes())}`
+          const newTitle = ev.summary || "Unbenannt"
+
+          const idx = current.findIndex(t => t.gcalId === ev.id)
+          if (idx === -1) {
+            // Neuer Termin
+            current.push({ id: uid(), title: newTitle, date: newDate, time: newTime, duration: dur, label: lbl, priority: "P3", energy: 0, status: "open", gcalId: ev.id, allDay: isAllDay || undefined })
+            added++
+          } else {
+            // Bestehenden Termin aktualisieren — status, priority, energy, notes behalten
+            const existing = current[idx]
+            const changed = existing.title !== newTitle || existing.date !== newDate || existing.time !== newTime || existing.duration !== dur
+            if (changed) {
+              current[idx] = { ...existing, title: newTitle, date: newDate, time: newTime, duration: dur, allDay: isAllDay || undefined }
+              updated++
+            }
+          }
         }
       }
       setAuthed(true)
       setTasks(current); store.tasks(current)
-      showToast(added > 0 ? `${added} Ereignisse importiert ✓` : "Alles aktuell ✓")
+      const msg = [added > 0 && `${added} neu`, updated > 0 && `${updated} aktualisiert`].filter(Boolean).join(", ")
+      showToast(msg ? `${msg} ✓` : "Alles aktuell ✓")
     } catch (e) {
       console.error(e)
       showToast(e.message || "Sync-Fehler", 8000)
