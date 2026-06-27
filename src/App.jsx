@@ -61,7 +61,10 @@ function getTokenClient() {
   if (_tokenClient) return _tokenClient
   _tokenClient = window.google.accounts.oauth2.initTokenClient({
     client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-    scope: "https://www.googleapis.com/auth/calendar",
+    scope: [
+      "https://www.googleapis.com/auth/calendar",
+      "https://www.googleapis.com/auth/drive.appdata",
+    ].join(" "),
     callback: () => {},
   })
   return _tokenClient
@@ -146,6 +149,67 @@ const gUpdate = (id, eid, title, s, e) => withAuth(() =>
 const gDel = (id, eid) => withAuth(() =>
   calApi("DELETE", `/calendars/${encodeURIComponent(id)}/events/${eid}`)
 )
+
+// ─── Google Drive appdata sync ────────────────────────────────
+const DRIVE_FILE = "poco-data.json"
+let _driveFileId = null
+
+async function driveApi(method, path, body, params) {
+  const url = new URL(`https://www.googleapis.com${path}`)
+  if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
+  const r = await fetch(url, {
+    method,
+    headers: {
+      Authorization: `Bearer ${_accessToken}`,
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (r.status === 401) { _accessToken = null; throw new Error("token_expired") }
+  if (!r.ok) throw new Error(`Drive API ${r.status}`)
+  if (r.status === 204) return { ok: true }
+  return r.json()
+}
+
+async function driveRead() {
+  return withAuth(async () => {
+    // Find file in appDataFolder
+    const list = await driveApi("GET", "/drive/v3/files", null, {
+      spaces: "appDataFolder",
+      q: `name = '${DRIVE_FILE}'`,
+      fields: "files(id)",
+    })
+    if (!list.files?.length) return null
+    _driveFileId = list.files[0].id
+    const r = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${_driveFileId}?alt=media`,
+      { headers: { Authorization: `Bearer ${_accessToken}` } }
+    )
+    if (!r.ok) return null
+    return r.json()
+  })
+}
+
+async function driveWrite(data) {
+  return withAuth(async () => {
+    const body = JSON.stringify({ version: 1, ...data })
+    if (_driveFileId) {
+      // Update existing file
+      await fetch(
+        `https://www.googleapis.com/upload/drive/v3/files/${_driveFileId}?uploadType=media`,
+        { method: "PATCH", headers: { Authorization: `Bearer ${_accessToken}`, "Content-Type": "application/json" }, body }
+      )
+    } else {
+      // Create new file in appDataFolder
+      const meta = await driveApi("POST", "/drive/v3/files", { name: DRIVE_FILE, parents: ["appDataFolder"] })
+      _driveFileId = meta.id
+      await fetch(
+        `https://www.googleapis.com/upload/drive/v3/files/${_driveFileId}?uploadType=media`,
+        { method: "PATCH", headers: { Authorization: `Bearer ${_accessToken}`, "Content-Type": "application/json" }, body }
+      )
+    }
+  })
+}
 
 // ─── Storage (localStorage) ───────────────────────────────────
 const store = {
@@ -813,6 +877,7 @@ export default function App() {
       setCals(c)
       showToast("Kalender wird synchronisiert …", 3000)
       // Auto-sync on startup: delay so GIS script is loaded and doSyncRef is set
+      // driveLoad runs inside doSync after auth succeeds
       setTimeout(() => doSyncRef.current?.(), 1500)
     } else {
       showToast("↻ drücken um Google Kalender zu verbinden", 5000)
@@ -843,7 +908,7 @@ export default function App() {
 
   const handleCalMapSave = (map) => {
     const filtered = Object.fromEntries(Object.entries(map).filter(([, v]) => v))
-    setCals(filtered); store.cals(filtered)
+    setCals(filtered); persist(null, filtered)
     setCalPicker(null)
     showToast(`${Object.keys(filtered).length} Kalender verbunden ✓`)
     calPicker.resolve(filtered)
@@ -853,6 +918,15 @@ export default function App() {
     setCalPicker(null)
     showToast("Sync übersprungen")
     calPicker.resolve(null)
+  }
+
+  // Persist to both localStorage (fast/offline) and Drive (cross-device)
+  const persist = async (newTasks, newCals, newBudget) => {
+    const t = newTasks  ?? store.load().tasks
+    const c = newCals   ?? store.load().cals
+    const b = newBudget ?? store.load().budget
+    store.tasks(t); store.cals(c); store.budget(b)
+    try { await driveWrite({ tasks: t, cals: c, budget: b }) } catch {}
   }
 
   const doSync = async () => {
@@ -866,11 +940,16 @@ export default function App() {
       }
 
       showToast("Synchronisiere …", 15000)
+
+      // Load latest state from Drive first (picks up changes from other devices)
+      let driveData = null
+      try { driveData = await driveRead() } catch {}
+      const base = driveData?.tasks ?? store.load().tasks
+      const current = [...base]; let added = 0; let updated = 0
+
       // ±2 Wochen um heute
       const winStart = dPlus(getMon(new Date()), -14)
       const winEnd   = dPlus(getMon(new Date()),  21)
-      // Read fresh from localStorage to avoid stale React closure
-      const current = [...store.load().tasks]; let added = 0; let updated = 0
 
       for (const [lbl, id] of Object.entries(calMap)) {
         if (!id) continue
@@ -892,11 +971,9 @@ export default function App() {
 
           const idx = current.findIndex(t => t.gcalId === ev.id)
           if (idx === -1) {
-            // Neuer Termin
             current.push({ id: uid(), title: newTitle, date: newDate, time: newTime, duration: dur, label: lbl, priority: "P3", energy: 0, status: "open", gcalId: ev.id, allDay: isAllDay || undefined })
             added++
           } else {
-            // Bestehenden Termin aktualisieren — status, priority, energy, notes behalten
             const existing = current[idx]
             const changed = existing.title !== newTitle || existing.date !== newDate || existing.time !== newTime || existing.duration !== dur
             if (changed) {
@@ -907,7 +984,8 @@ export default function App() {
         }
       }
       setAuthed(true)
-      setTasks(current); store.tasks(current)
+      setTasks(current)
+      await persist(current, calMap)
       const msg = [added > 0 && `${added} neu`, updated > 0 && `${updated} aktualisiert`].filter(Boolean).join(", ")
       showToast(msg ? `${msg} ✓` : "Alles aktuell ✓")
     } catch (e) {
@@ -936,7 +1014,7 @@ export default function App() {
     }
     const fin     = { ...f, gcalId }
     const updated = existing ? tasks.map(t => t.id === f.id ? fin : t) : [...tasks, fin]
-    setTasks(updated); store.tasks(updated)
+    setTasks(updated); persist(updated)
     setModal(null); showToast(existing ? "Gespeichert ✓" : "Aufgabe erstellt ✓")
   }
 
@@ -946,15 +1024,15 @@ export default function App() {
       try { await gDel(cals[t.label], t.gcalId) } catch {}
     }
     const updated = tasks.filter(x => x.id !== id)
-    setTasks(updated); store.tasks(updated)
+    setTasks(updated); persist(updated)
     setModal(null); showToast("Gelöscht")
   }
 
-  const handleBudget = (v) => { setBudget(v); store.budget(v) }
+  const handleBudget = (v) => { setBudget(v); persist(null, null, v) }
 
   const handleToggleDone = (id) => {
     const updated = tasks.map(t => t.id === id ? { ...t, status: t.status === "done" ? "open" : "done" } : t)
-    setTasks(updated); store.tasks(updated)
+    setTasks(updated); persist(updated)
   }
 
   return (
