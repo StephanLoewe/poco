@@ -945,7 +945,8 @@ export default function App() {
 
       // Load latest state from Drive first (picks up changes from other devices)
       let driveData = null
-      try { driveData = await driveRead() } catch {}
+      try { driveData = await driveRead() } catch (driveErr) { console.warn("Drive read failed:", driveErr?.message) }
+      const driveOk = !!driveData
       const base = driveData?.tasks ?? store.load().tasks
       const current = [...base]; let added = 0; let updated = 0
 
@@ -989,7 +990,8 @@ export default function App() {
       setTasks(current)
       await persist(current, calMap)
       const msg = [added > 0 && `${added} neu`, updated > 0 && `${updated} aktualisiert`].filter(Boolean).join(", ")
-      showToast(msg ? `${msg} ✓` : "Alles aktuell ✓")
+      const driveMsg = driveOk ? "" : " (Drive offline)"
+      showToast(msg ? `${msg} ✓${driveMsg}` : `Alles aktuell ✓${driveMsg}`)
     } catch (e) {
       console.error(e)
       showToast(e.message || "Sync-Fehler", 8000)
