@@ -35,6 +35,7 @@ const EC = [
   { v:  2, icon: "▸▸", l: "Anstrengend",       c: "#EA580C" },
   { v:  3, icon: "▸▸▸",l: "Sehr anstrengend",  c: "#DC2626" },
 ]
+const APP_VERSION = "1.1"
 const DURS = [2, 15, 30, 45, 60, 90, 120, 150, 180, 240]
 const DL   = { 2:"2min", 15:"15min", 30:"30min", 45:"45min", 60:"1h", 90:"1.5h", 120:"2h", 150:"2.5h", 180:"3h", 240:"4h" }
 const WDAY = ["So","Mo","Di","Mi","Do","Fr","Sa"]
@@ -826,6 +827,7 @@ function Header({ view, setView, date, setDate, onAdd, syncing, onSync, authed }
             }}>{l}</button>
           ))}
         </div>
+        <span style={{ fontSize: 10, color: T.dim, marginRight: 6 }}>v{APP_VERSION}</span>
         <button onClick={onSync} disabled={syncing} title={authed ? "Sync mit Google Kalender" : "Mit Google Kalender verbinden"}
           style={{ width: 34, height: 34, borderRadius: 10, border: `1px solid ${authed ? T.border : "rgba(37,99,235,0.3)"}`, background: authed ? T.surface : "rgba(37,99,235,0.06)", color: syncing ? "#2563EB" : authed ? T.muted : "#2563EB", cursor: syncing ? "default" : "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", animation: syncing ? "spin 1s linear infinite" : "none" }}>
           ↻
