@@ -910,6 +910,20 @@ export default function App() {
     })
   }
 
+  // Direkt aus User-Gesture aufrufen — kein await davor, sonst blockt Mobile Safari den Popup
+  const doLogin = () => {
+    if (!window.google?.accounts?.oauth2) { showToast("App lädt noch, kurz warten …", 3000); return }
+    const client = getTokenClient()
+    client.callback = (resp) => {
+      if (resp.error) { showToast("Anmeldung fehlgeschlagen: " + resp.error, 5000); return }
+      _accessToken = resp.access_token
+      setAuthed(true)
+      showToast("Angemeldet, synchronisiere …", 3000)
+      setTimeout(() => doSyncRef.current?.(), 300)
+    }
+    client.requestAccessToken({ prompt: "" })
+  }
+
   const handleCalMapSave = (map) => {
     const filtered = Object.fromEntries(Object.entries(map).filter(([, v]) => v))
     setCals(filtered); persist(null, filtered)
@@ -1056,7 +1070,7 @@ export default function App() {
         <Header view={view} setView={setView} date={date} setDate={setDate}
           onAdd={() => setModal({ task: view === "inbox" ? { date: "" } : {} })} syncing={syncing} onSync={doSync} />
         {!authed && (
-          <button onClick={doSync} style={{ margin: "8px 16px 0", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(37,99,235,0.25)", background: "rgba(37,99,235,0.06)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: "#2563EB", flexShrink: 0 }}>
+          <button onClick={doLogin} style={{ margin: "8px 16px 0", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(37,99,235,0.25)", background: "rgba(37,99,235,0.06)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: "#2563EB", flexShrink: 0 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
               <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
