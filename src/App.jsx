@@ -68,17 +68,32 @@ const TZ    = Intl.DateTimeFormat().resolvedOptions().timeZone
 let _tokenClient = null
 let _accessToken = null
 
+const SCOPES = [
+  "https://www.googleapis.com/auth/calendar",
+  "https://www.googleapis.com/auth/drive.appdata",
+].join(" ")
+
 function getTokenClient() {
   if (_tokenClient) return _tokenClient
   _tokenClient = window.google.accounts.oauth2.initTokenClient({
     client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-    scope: [
-      "https://www.googleapis.com/auth/calendar",
-      "https://www.googleapis.com/auth/drive.appdata",
-    ].join(" "),
+    scope: SCOPES,
     callback: () => {},
   })
   return _tokenClient
+}
+
+// Force re-consent to upgrade scopes (e.g. when Drive returns 403)
+function requestConsent() {
+  return new Promise((resolve, reject) => {
+    const client = getTokenClient()
+    client.callback = (resp) => {
+      if (resp.error) { reject(new Error(resp.error)); return }
+      _accessToken = resp.access_token
+      resolve()
+    }
+    client.requestAccessToken({ prompt: "consent" })
+  })
 }
 
 // Waits for the GIS script to finish loading (it has async attribute).
@@ -174,6 +189,7 @@ async function driveAuthFetch(url, opts = {}) {
     headers: { Authorization: `Bearer ${_accessToken}`, ...(opts.headers || {}) },
   })
   if (r.status === 401) { _accessToken = null; throw new Error("token_expired") }
+  if (r.status === 403) { throw new Error("drive_forbidden") }
   if (!r.ok) {
     const txt = await r.text().catch(() => "")
     throw new Error(`Drive ${r.status}: ${txt.slice(0, 120)}`)
@@ -181,51 +197,69 @@ async function driveAuthFetch(url, opts = {}) {
   return r
 }
 
+async function driveReadInner() {
+  const url = new URL("https://www.googleapis.com/drive/v3/files")
+  url.searchParams.set("spaces", "appDataFolder")
+  url.searchParams.set("q", `name = '${DRIVE_FILE}'`)
+  url.searchParams.set("fields", "files(id)")
+  const list = await (await driveAuthFetch(url)).json()
+  if (!list.files?.length) return null
+  _driveFileId = list.files[0].id
+  const r = await driveAuthFetch(
+    `https://www.googleapis.com/drive/v3/files/${_driveFileId}?alt=media`
+  )
+  return r.json()
+}
+
 async function driveRead() {
   return withAuth(async () => {
-    const url = new URL("https://www.googleapis.com/drive/v3/files")
-    url.searchParams.set("spaces", "appDataFolder")
-    url.searchParams.set("q", `name = '${DRIVE_FILE}'`)
-    url.searchParams.set("fields", "files(id)")
-    const list = await (await driveAuthFetch(url)).json()
-    if (!list.files?.length) return null
-    _driveFileId = list.files[0].id
-    const r = await driveAuthFetch(
-      `https://www.googleapis.com/drive/v3/files/${_driveFileId}?alt=media`
-    )
-    return r.json()
+    try {
+      return await driveReadInner()
+    } catch (e) {
+      if (e.message !== "drive_forbidden") throw e
+      // Scope missing — request consent and retry once
+      await requestConsent()
+      return await driveReadInner()
+    }
   })
+}
+
+async function driveWriteInner(content) {
+  if (_driveFileId) {
+    await driveAuthFetch(
+      `https://www.googleapis.com/upload/drive/v3/files/${_driveFileId}?uploadType=media`,
+      { method: "PATCH", headers: { "Content-Type": "application/json" }, body: content }
+    )
+  } else {
+    const boundary = "poco_boundary"
+    const multipart = [
+      `--${boundary}`,
+      "Content-Type: application/json",
+      "",
+      JSON.stringify({ name: DRIVE_FILE, parents: ["appDataFolder"] }),
+      `--${boundary}`,
+      "Content-Type: application/json",
+      "",
+      content,
+      `--${boundary}--`,
+    ].join("\r\n")
+    const r = await driveAuthFetch(
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+      { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipart }
+    )
+    _driveFileId = (await r.json()).id
+  }
 }
 
 async function driveWrite(data) {
   return withAuth(async () => {
     const content = JSON.stringify({ version: 1, ...data })
-    if (_driveFileId) {
-      // Update content of existing file
-      await driveAuthFetch(
-        `https://www.googleapis.com/upload/drive/v3/files/${_driveFileId}?uploadType=media`,
-        { method: "PATCH", headers: { "Content-Type": "application/json" }, body: content }
-      )
-    } else {
-      // Create with multipart: metadata + content in one request
-      const boundary = "foo_bar_baz"
-      const multipart = [
-        `--${boundary}`,
-        "Content-Type: application/json",
-        "",
-        JSON.stringify({ name: DRIVE_FILE, parents: ["appDataFolder"] }),
-        `--${boundary}`,
-        "Content-Type: application/json",
-        "",
-        content,
-        `--${boundary}--`,
-      ].join("\r\n")
-      const r = await driveAuthFetch(
-        "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
-        { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipart }
-      )
-      const meta = await r.json()
-      _driveFileId = meta.id
+    try {
+      await driveWriteInner(content)
+    } catch (e) {
+      if (e.message !== "drive_forbidden") throw e
+      await requestConsent()
+      await driveWriteInner(content)
     }
   })
 }
