@@ -45,7 +45,7 @@ const EC = [
   { v:  2, icon: "▸▸", l: "Anstrengend",       c: "#EA580C" },
   { v:  3, icon: "▸▸▸",l: "Sehr anstrengend",  c: "#DC2626" },
 ]
-const APP_VERSION = "1.3"
+const APP_VERSION = "1.4"
 const DURS = [2, 15, 30, 45, 60, 90, 120, 150, 180, 240]
 const DL   = { 2:"2min", 15:"15min", 30:"30min", 45:"45min", 60:"1h", 90:"1.5h", 120:"2h", 150:"2.5h", 180:"3h", 240:"4h" }
 const WDAY = ["So","Mo","Di","Mi","Do","Fr","Sa"]
@@ -879,6 +879,7 @@ export default function App() {
   const [syncing, setSyncing] = useState(false)
   const [toast,   setToast  ] = useState("")
   const [authed,  setAuthed ] = useState(false)
+  const [driveForbidden, setDriveForbidden] = useState(false) // token lacks drive scope
   const [calPicker, setCalPicker] = useState(null) // list of google cals for mapping UI
 
   const showToast = (m, ms = 3000) => { setToast(m); setTimeout(() => setToast(""), ms) }
@@ -926,9 +927,8 @@ export default function App() {
   }
 
   // Direkt aus User-Gesture aufrufen — kein await davor, sonst blockt Mobile Safari den Popup.
-  // Beim ersten Mal (oder solange Drive nicht freigegeben ist) erzwingen wir den
-  // Consent-Screen, damit der drive.appdata-Scope sicher erteilt wird.
-  const doLogin = () => {
+  // forceConsent=true erzwingt den Consent-Screen (z.B. um Drive nachträglich freizugeben).
+  const doLogin = (forceConsent = false) => {
     if (!window.google?.accounts?.oauth2) { showToast("App lädt noch, kurz warten …", 3000); return }
     const driveGranted = localStorage.getItem("poco-drive-ok") === "1"
     const client = getTokenClient()
@@ -938,10 +938,11 @@ export default function App() {
       const hasDrive = window.google.accounts.oauth2.hasGrantedAllScopes(resp, DRIVE_SCOPE)
       if (hasDrive) localStorage.setItem("poco-drive-ok", "1")
       else localStorage.removeItem("poco-drive-ok")
+      setDriveForbidden(!hasDrive)
       setAuthed(true) // triggers the [authed,cals] effect → doSync
-      showToast(hasDrive ? "Angemeldet, synchronisiere …" : "Angemeldet (Drive nicht freigegeben)", 4000)
+      showToast(hasDrive ? "Angemeldet, synchronisiere …" : "Drive wurde nicht freigegeben", 5000)
     }
-    client.requestAccessToken({ prompt: driveGranted ? "" : "consent" })
+    client.requestAccessToken({ prompt: (forceConsent || !driveGranted) ? "consent" : "" })
   }
 
   const handleCalMapSave = (map) => {
@@ -1041,12 +1042,13 @@ export default function App() {
       setTasks(current)
       await persist(current, calMap)
       const parts = [added > 0 && `${added} neu`, updated > 0 && `${updated} aktualisiert`].filter(Boolean)
-      // Drive failed because scope was never granted → guide user to re-login
+      // Drive failed because scope was never granted → show a re-consent button
       const needsConsent = driveReadErr === "drive_forbidden"
-      const driveMsg = driveOk ? "" : needsConsent
-        ? " · Drive: bitte neu anmelden für Geräte-Sync"
-        : ` · Drive: ${driveReadErr?.slice(0, 40) || "offline"}`
+      setDriveForbidden(needsConsent)
       if (needsConsent) localStorage.removeItem("poco-drive-ok")
+      const driveMsg = driveOk ? "" : needsConsent
+        ? " · Drive nicht freigegeben"
+        : ` · Drive: ${driveReadErr?.slice(0, 40) || "offline"}`
       showToast(parts.length > 0 ? `${parts.join(", ")} ✓${driveMsg}` : `${current.length} Einträge · alles aktuell${driveMsg}`, driveOk ? 3000 : 8000)
     } catch (e) {
       console.error(e)
@@ -1125,6 +1127,11 @@ export default function App() {
                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.83c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
               </svg>
               Mit Google anmelden & synchronisieren
+            </button>
+          )}
+          {authed && driveForbidden && (
+            <button onClick={() => doLogin(true)} style={{ margin: "8px 16px 0", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(234,88,12,0.3)", background: "rgba(234,88,12,0.08)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: "#EA580C", flexShrink: 0 }}>
+              ⚠️ Drive für Geräte-Sync freigeben
             </button>
           )}
           {view !== "inbox" && <LabelLegend />}
