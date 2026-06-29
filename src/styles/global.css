@@ -1,0 +1,19 @@
+/* ─── Global styles ─────────────────────────────────────────── */
+* {
+  -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
+}
+
+input[type=date]::-webkit-calendar-picker-indicator,
+input[type=time]::-webkit-calendar-picker-indicator {
+  opacity: 0.4;
+  cursor: pointer;
+}
+
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #D0D8EA; border-radius: 2px; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.list-group > div:last-child { border-bottom: none; }
