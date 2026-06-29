@@ -851,8 +851,15 @@ const TAB_ICONS = {
 const TAB_LABELS = { inbox: "Inbox", list: "Liste", day: "Tag", week: "Woche" }
 const TABS = ["inbox", "list", "day", "week"]
 
-function TabBar({ view, setView }) {
-  const activeIdx = TABS.indexOf(view)
+// Tabs split around the center + button: [inbox, list] + [day, week]
+const TABS_LEFT  = ["inbox", "list"]
+const TABS_RIGHT = ["day", "week"]
+
+function TabBar({ view, setView, onAdd }) {
+  // Blob position: 0-1 for left tabs, 3-4 for right (slot 2 is the + button)
+  const allSlots = ["inbox", "list", null, "day", "week"]
+  const activeSlot = allSlots.indexOf(view)
+
   return (
     <div style={{
       position: "fixed",
@@ -866,42 +873,67 @@ function TabBar({ view, setView }) {
       border: "1px solid rgba(255,255,255,0.6)",
       boxShadow: "0 8px 32px rgba(0,0,0,0.12), 0 1px 0 rgba(255,255,255,0.8) inset",
       padding: "6px",
-      display: "flex", gap: 2,
-      // min-content width so pill wraps tightly on phone
+      display: "flex", alignItems: "center", gap: 2,
     }}>
-      {/* Sliding blob behind active tab */}
-      <div style={{
-        position: "absolute",
-        top: 6,
-        left: `calc(6px + ${activeIdx} * (100% - 12px) / 4)`,
-        width: "calc((100% - 12px) / 4)",
-        bottom: 6,
-        background: "rgba(37,99,235,0.12)",
-        borderRadius: 26,
-        transition: "left 0.28s cubic-bezier(0.34,1.56,0.64,1)",
-        pointerEvents: "none",
-      }} />
+      {/* Sliding blob — only shown when a real tab is active */}
+      {activeSlot >= 0 && (
+        <div style={{
+          position: "absolute",
+          top: 6, bottom: 6,
+          left: `calc(6px + ${activeSlot} * (100% - 12px) / 5)`,
+          width: "calc((100% - 12px) / 5)",
+          background: "rgba(37,99,235,0.12)",
+          borderRadius: 26,
+          transition: "left 0.28s cubic-bezier(0.34,1.56,0.64,1)",
+          pointerEvents: "none",
+        }} />
+      )}
 
-      {TABS.map((v, i) => {
+      {/* Left tabs */}
+      {TABS_LEFT.map(v => {
         const active = view === v
         return (
           <button key={v} onClick={() => setView(v)} style={{
-            position: "relative",
-            border: "none", background: "transparent", cursor: "pointer",
-            padding: "8px 16px", borderRadius: 26,
-            display: "flex", flexDirection: "column",
-            alignItems: "center", gap: 3,
+            position: "relative", border: "none", background: "transparent",
+            cursor: "pointer", padding: "8px 14px", borderRadius: 26,
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
             color: active ? "#2563EB" : "var(--color-text-muted)",
-            transition: "color 0.2s",
-            minWidth: 64,
+            transition: "color 0.2s", minWidth: 60,
           }}>
             {TAB_ICONS[v]}
-            <span style={{
-              fontSize: 10,
-              fontWeight: active ? 600 : 400,
-              fontFamily: "inherit",
-              letterSpacing: "0.01em",
-            }}>
+            <span style={{ fontSize: 10, fontWeight: active ? 600 : 400, fontFamily: "inherit" }}>
+              {TAB_LABELS[v]}
+            </span>
+          </button>
+        )
+      })}
+
+      {/* Center + button */}
+      <button onClick={onAdd} style={{
+        position: "relative", border: "none", cursor: "pointer",
+        width: 44, height: 44, borderRadius: 22, flexShrink: 0,
+        background: "#2563EB",
+        color: "white", fontSize: 24, fontWeight: 300, lineHeight: 1,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        boxShadow: "0 4px 12px rgba(37,99,235,0.4)",
+        margin: "0 4px",
+      }}>
+        +
+      </button>
+
+      {/* Right tabs */}
+      {TABS_RIGHT.map(v => {
+        const active = view === v
+        return (
+          <button key={v} onClick={() => setView(v)} style={{
+            position: "relative", border: "none", background: "transparent",
+            cursor: "pointer", padding: "8px 14px", borderRadius: 26,
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+            color: active ? "#2563EB" : "var(--color-text-muted)",
+            transition: "color 0.2s", minWidth: 60,
+          }}>
+            {TAB_ICONS[v]}
+            <span style={{ fontSize: 10, fontWeight: active ? 600 : 400, fontFamily: "inherit" }}>
               {TAB_LABELS[v]}
             </span>
           </button>
@@ -1243,21 +1275,8 @@ export default function App() {
         {modal && <TaskModal task={modal.task} onSave={handleSave} onDelete={handleDelete} onClose={() => setModal(null)} />}
         {calPicker && <CalendarMapModal googleCals={calPicker.list} onSave={handleCalMapSave} onSkip={handleCalMapSkip} />}
         <Toast msg={toast} />
-        <TabBar view={view} setView={setView} isMobile={isMobile} />
-
-        <button
-          onClick={() => setModal({ task: view === "inbox" ? { date: "" } : {} })}
-          style={{
-            position: "fixed", bottom: `calc(16px + env(safe-area-inset-bottom))`, right: 16,
-            width: 52, height: 52, borderRadius: 26,
-            border: "none", background: "#2563EB", color: "white",
-            fontSize: 26, fontWeight: 300, lineHeight: 1,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 4px 16px rgba(37,99,235,0.4)",
-            cursor: "pointer", zIndex: 100,
-          }}>
-          +
-        </button>
+        <TabBar view={view} setView={setView}
+          onAdd={() => setModal({ task: view === "inbox" ? { date: "" } : {} })} />
       </div>
     </>
   )
