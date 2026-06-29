@@ -851,14 +851,8 @@ const TAB_ICONS = {
 const TAB_LABELS = { inbox: "Inbox", list: "Liste", day: "Tag", week: "Woche" }
 const TABS = ["inbox", "list", "day", "week"]
 
-// Tabs split around the center + button: [inbox, list] + [day, week]
-const TABS_LEFT  = ["inbox", "list"]
-const TABS_RIGHT = ["day", "week"]
-
 function TabBar({ view, setView, onAdd }) {
-  // Blob position: 0-1 for left tabs, 3-4 for right (slot 2 is the + button)
-  const allSlots = ["inbox", "list", null, "day", "week"]
-  const activeSlot = allSlots.indexOf(view)
+  const activeIdx = TABS.indexOf(view)
 
   return (
     <div style={{
@@ -875,13 +869,13 @@ function TabBar({ view, setView, onAdd }) {
       padding: "6px",
       display: "flex", alignItems: "center", gap: 2,
     }}>
-      {/* Sliding blob — only shown when a real tab is active */}
-      {activeSlot >= 0 && (
+      {/* Sliding blob */}
+      {activeIdx >= 0 && (
         <div style={{
           position: "absolute",
           top: 6, bottom: 6,
-          left: `calc(6px + ${activeSlot} * (100% - 12px) / 5)`,
-          width: "calc((100% - 12px) / 5)",
+          left: `calc(6px + ${activeIdx} * (100% - 60px) / 4)`,
+          width: "calc((100% - 60px) / 4)",
           background: "rgba(37,99,235,0.12)",
           borderRadius: 26,
           transition: "left 0.28s cubic-bezier(0.34,1.56,0.64,1)",
@@ -889,8 +883,7 @@ function TabBar({ view, setView, onAdd }) {
         }} />
       )}
 
-      {/* Left tabs */}
-      {TABS_LEFT.map(v => {
+      {TABS.map(v => {
         const active = view === v
         return (
           <button key={v} onClick={() => setView(v)} style={{
@@ -908,37 +901,18 @@ function TabBar({ view, setView, onAdd }) {
         )
       })}
 
-      {/* Center + button */}
+      {/* + button rechts */}
       <button onClick={onAdd} style={{
-        position: "relative", border: "none", cursor: "pointer",
+        border: "none", cursor: "pointer",
         width: 44, height: 44, borderRadius: 22, flexShrink: 0,
-        background: "#2563EB",
-        color: "white", fontSize: 24, fontWeight: 300, lineHeight: 1,
+        background: "#2563EB", color: "white",
+        fontSize: 24, fontWeight: 300, lineHeight: 1,
         display: "flex", alignItems: "center", justifyContent: "center",
         boxShadow: "0 4px 12px rgba(37,99,235,0.4)",
-        margin: "0 4px",
+        margin: "0 2px 0 4px",
       }}>
         +
       </button>
-
-      {/* Right tabs */}
-      {TABS_RIGHT.map(v => {
-        const active = view === v
-        return (
-          <button key={v} onClick={() => setView(v)} style={{
-            position: "relative", border: "none", background: "transparent",
-            cursor: "pointer", padding: "8px 14px", borderRadius: 26,
-            display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
-            color: active ? "#2563EB" : "var(--color-text-muted)",
-            transition: "color 0.2s", minWidth: 60,
-          }}>
-            {TAB_ICONS[v]}
-            <span style={{ fontSize: 10, fontWeight: active ? 600 : 400, fontFamily: "inherit" }}>
-              {TAB_LABELS[v]}
-            </span>
-          </button>
-        )
-      })}
     </div>
   )
 }
