@@ -994,11 +994,12 @@ export default function App() {
       const parts = [added > 0 && `${added} neu`, updated > 0 && `${updated} aktualisiert`].filter(Boolean)
       // Only prompt for the secret on explicit 401 — not on timeout/network errors
       const wrongSecret = remoteErr === "api_unauthorized"
+      const noSecret   = remoteErr === "no_secret"
       if (remoteOk) setNeedsSecret(false)
-      else if (wrongSecret) setNeedsSecret(true)
-      const remoteMsg = remoteOk ? "" : wrongSecret
-        ? " · Sync-Passwort falsch"
-        : ` · Sync: ${remoteErr?.slice(0, 40) || "offline"}`
+      else if (wrongSecret || noSecret) setNeedsSecret(true)
+      const remoteMsg = remoteOk ? "" : (wrongSecret || noSecret)
+        ? " · Sync-Passwort nötig"
+        : remoteErr === "Timeout" ? " · Sync-Timeout" : " · Sync offline"
       showToast(parts.length > 0 ? `${parts.join(", ")} ✓${remoteMsg}` : `${current.length} Einträge · alles aktuell${remoteMsg}`, remoteOk ? 3000 : 8000)
     } catch (e) {
       console.error(e)
