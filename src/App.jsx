@@ -1063,22 +1063,17 @@ export default function App() {
         if (seenGcal.has(t.gcalId)) return false
         seenGcal.add(t.gcalId); return true
       })
-      let current = [...base]; let added = 0; let updated = 0; let removed = 0
+      let current = [...base]; let added = 0; let updated = 0
 
       // ±2 Wochen um heute
       const winStart = dPlus(getMon(new Date()), -14)
       const winEnd   = dPlus(getMon(new Date()),  21)
 
-      // Collect all gcalIds seen in this sync run (per calendar label)
-      const seenByLabel = {} // label → Set of gcalIds
-
       for (const [lbl, id] of Object.entries(calMap)) {
         if (!id) continue
         const evs = await gEvents(id, winStart.toISOString(), winEnd.toISOString())
         if (!Array.isArray(evs)) continue
-        seenByLabel[lbl] = new Set()
         for (const ev of evs) {
-          seenByLabel[lbl].add(ev.id)
           const isAllDay = !ev.start?.dateTime
           const s = isAllDay
             ? new Date(ev.start.date + "T00:00:00")
@@ -1113,23 +1108,10 @@ export default function App() {
         }
       }
 
-      // Remove tasks whose GCal event was deleted — only within the sync window
-      // and only for calendars that were successfully fetched
-      current = current.filter(t => {
-        if (!t.gcalId || !t.date) return true           // manual/inbox tasks: keep
-        const lbl = t.label
-        if (!seenByLabel[lbl]) return true              // calendar not fetched: keep
-        const taskDate = new Date(t.date + "T00:00:00")
-        if (taskDate < winStart || taskDate > winEnd) return true  // outside window: keep
-        if (seenByLabel[lbl].has(t.gcalId)) return true           // still exists: keep
-        removed++
-        return false
-      })
-
       setAuthed(true)
       setTasks(current)
       await persist(current, calMap)
-      const parts = [added > 0 && `${added} neu`, updated > 0 && `${updated} aktualisiert`, removed > 0 && `${removed} entfernt`].filter(Boolean)
+      const parts = [added > 0 && `${added} neu`, updated > 0 && `${updated} aktualisiert`].filter(Boolean)
       // Only prompt for the secret on explicit 401 — not on timeout/network errors
       const wrongSecret = remoteErr === "api_unauthorized"
       const noSecret   = remoteErr === "no_secret"
