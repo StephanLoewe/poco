@@ -29,15 +29,8 @@ export const gEvents = (id, a, b) => withAuth(async () => {
     calApi("GET", `/calendars/${encodeURIComponent(id)}/events?${p}`),
     calApi("GET", `/calendars/${encodeURIComponent(id)}/events?${pFocus}`),
   ])
-  // If the primary (default) fetch failed, return null so the caller can tell
-  // "fetch failed" apart from "no events" — critical to avoid wrongly deleting
-  // tasks for a calendar that just had a transient error (401/403/network).
-  if (r1.status !== "fulfilled") {
-    console.warn("gEvents default fetch failed:", r1.reason?.message)
-    return null
-  }
   const raw = [
-    ...(r1.value.items || []),
+    ...(r1.status === "fulfilled" ? r1.value.items || [] : []),
     ...(r2.status === "fulfilled" ? r2.value.items || [] : []),
   ]
   // Deduplicate by id within this calendar (can appear in both default + focusTime)
