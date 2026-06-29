@@ -582,10 +582,9 @@ function ListView({ tasks, date, onTaskClick, onAdd, onToggleDone }) {
               </div>
             )}
 
-            {open.map(t => <ListRow key={t.id} task={t} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />)}
-
-            {done.length > 0 && (
-              <div style={{ marginTop: open.length > 0 ? 6 : 0 }}>
+            {(open.length > 0 || done.length > 0) && (
+              <div className="list-group" style={{ background: T.surface, borderRadius: 12, padding: "0 14px", border: `1px solid ${T.border}` }}>
+                {open.map(t => <ListRow key={t.id} task={t} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />)}
                 {done.map(t => <ListRow key={t.id} task={t} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />)}
               </div>
             )}
@@ -599,47 +598,66 @@ function ListView({ tasks, date, onTaskClick, onAdd, onToggleDone }) {
 function ListRow({ task, onClick, onToggleDone }) {
   const lc   = LC[task.label] || LC.Arbeit
   const pr   = PC[task.priority]
-  const en   = eCnf(task.energy)
   const done = task.status === "done"
+  const endTime = task.time ? eAdd(task.time, task.duration) : null
+
+  const meta = [
+    task.time && endTime && `${task.time} · ${endTime}`,
+    DL[task.duration],
+    task.label,
+  ].filter(Boolean)
 
   return (
     <div onClick={onClick} style={{
-      background: T.surface, borderRadius: 12,
-      border: `1px solid ${done ? T.border : lc.brd}`,
-      borderLeft: `3px solid ${done ? T.dim : lc.c}`,
-      padding: "10px 14px", marginBottom: 6,
-      cursor: "pointer", display: "flex", alignItems: "center", gap: 12,
-      opacity: done ? 0.52 : 1, transition: "all 0.15s",
+      padding: "10px 0",
+      borderBottom: `1px solid ${T.border}`,
+      cursor: "pointer", display: "flex", alignItems: "center", gap: 14,
+      opacity: done ? 0.5 : 1, transition: "opacity 0.15s",
     }}>
+      {/* Circular checkbox */}
       <div
         onClick={e => { e.stopPropagation(); onToggleDone() }}
         style={{
-          width: 18, height: 18, borderRadius: 5, flexShrink: 0,
-          border: `1.5px solid ${done ? lc.c : T.dim}`,
-          background: done ? lc.c : "transparent",
+          width: 18, height: 18, borderRadius: 1000, flexShrink: 0,
+          border: `1.5px solid ${done ? lc.pastelText : T.dim}`,
+          background: done ? lc.pastelText : "transparent",
           display: "flex", alignItems: "center", justifyContent: "center",
           transition: "all 0.15s",
         }}
       >
-        {done && <span style={{ fontSize: 11, color: "white", lineHeight: 1 }}>✓</span>}
+        {done && (
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
       </div>
-      <div style={{ fontSize: 11, color: T.muted, minWidth: 38, textAlign: "right", flexShrink: 0, fontWeight: 500 }}>
-        {task.time}
-      </div>
+
+      {/* Info */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: done ? T.dim : T.text, textDecoration: done ? "line-through" : "none", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+        <div style={{
+          fontSize: 13, fontWeight: 600,
+          color: done ? T.dim : T.text,
+          textDecoration: done ? "line-through" : "none",
+          overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
+        }}>
           {task.title}
         </div>
-        <div style={{ fontSize: 11, color: T.muted, marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ color: lc.c, fontWeight: 500 }}>{task.label}</span>
-          <span>·</span>
-          <span>{DL[task.duration]}</span>
+        <div style={{ fontSize: 11, color: T.muted, marginTop: 3, display: "flex", alignItems: "center", gap: 0 }}>
+          {meta.map((item, i) => (
+            <span key={i}>
+              {i > 0 && <span style={{ color: T.dim, margin: "0 4px" }}>·</span>}
+              <span style={item === task.label ? { color: lc.pastelText, fontWeight: 500 } : {}}>
+                {item}
+              </span>
+            </span>
+          ))}
         </div>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-        <span style={{ fontSize: 11, color: en.c }}>{en.icon}</span>
-        <span style={{ fontSize: 10, fontWeight: 700, color: pr.c }}>{task.priority}</span>
-      </div>
+
+      {/* Priority badge */}
+      <span style={{ fontSize: 10, fontWeight: 700, color: T.dim, flexShrink: 0 }}>
+        {task.priority}
+      </span>
     </div>
   )
 }
@@ -1132,6 +1150,7 @@ export default function App() {
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #D0D8EA; border-radius: 2px; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        .list-group > div:last-child { border-bottom: none; }
       `}</style>
       <div style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", background: T.bg, color: T.text, height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden", paddingBottom: "calc(62px + env(safe-area-inset-bottom))" }}>
         {/* Centered chrome: header, login banner, legend, energy bar */}
