@@ -121,13 +121,16 @@ const gCals = () => withAuth(async () => {
 })
 
 const gEvents = (id, a, b) => withAuth(async () => {
-  const p = new URLSearchParams({ timeMin: a, timeMax: b, singleEvents: "true", maxResults: "250", eventTypes: "default", })
-  const pFocus = new URLSearchParams({ timeMin: a, timeMax: b, singleEvents: "true", maxResults: "250", eventTypes: "focusTime", })
-  const [d, df] = await Promise.all([
+  const p = new URLSearchParams({ timeMin: a, timeMax: b, singleEvents: "true", maxResults: "250", eventTypes: "default" })
+  const pFocus = new URLSearchParams({ timeMin: a, timeMax: b, singleEvents: "true", maxResults: "250", eventTypes: "focusTime" })
+  const [r1, r2] = await Promise.allSettled([
     calApi("GET", `/calendars/${encodeURIComponent(id)}/events?${p}`),
     calApi("GET", `/calendars/${encodeURIComponent(id)}/events?${pFocus}`),
   ])
-  const items = [...(d.items || []), ...(df.items || [])]
+  const items = [
+    ...(r1.status === "fulfilled" ? r1.value.items || [] : []),
+    ...(r2.status === "fulfilled" ? r2.value.items || [] : []),
+  ]
   return items.map(e => ({ id: e.id, summary: e.summary || (e.eventType === "focusTime" ? "Fokuszeit" : "Unbenannt"), start: e.start, end: e.end, eventType: e.eventType }))
 })
 
@@ -963,7 +966,17 @@ export default function App() {
       let driveData = null
       try { driveData = await driveRead() } catch (driveErr) { console.warn("Drive read failed:", driveErr?.message) }
       const driveOk = !!driveData
-      const base = driveData?.tasks ?? store.load().tasks
+      const localTasks = store.load().tasks
+      // Merge: Drive is source of truth for status/prio/energy, but keep any
+      // local tasks that Drive doesn't know about yet (e.g. first sync on new device)
+      let base
+      if (driveData?.tasks) {
+        const driveIds = new Set(driveData.tasks.map(t => t.id))
+        const localOnly = localTasks.filter(t => !driveIds.has(t.id))
+        base = [...driveData.tasks, ...localOnly]
+      } else {
+        base = localTasks
+      }
       const current = [...base]; let added = 0; let updated = 0
 
       // ±2 Wochen um heute
@@ -1005,9 +1018,9 @@ export default function App() {
       setAuthed(true)
       setTasks(current)
       await persist(current, calMap)
-      const msg = [added > 0 && `${added} neu`, updated > 0 && `${updated} aktualisiert`].filter(Boolean).join(", ")
-      const driveMsg = driveOk ? "" : " (Drive offline)"
-      showToast(msg ? `${msg} ✓${driveMsg}` : `Alles aktuell ✓${driveMsg}`)
+      const parts = [added > 0 && `${added} neu`, updated > 0 && `${updated} aktualisiert`].filter(Boolean)
+      const driveMsg = driveOk ? "" : " · Drive offline"
+      showToast(parts.length > 0 ? `${parts.join(", ")} ✓${driveMsg}` : `${current.length} Einträge · alles aktuell${driveMsg}`)
     } catch (e) {
       console.error(e)
       showToast(e.message || "Sync-Fehler", 8000)
