@@ -157,10 +157,13 @@ const gEvents = (id, a, b) => withAuth(async () => {
     calApi("GET", `/calendars/${encodeURIComponent(id)}/events?${p}`),
     calApi("GET", `/calendars/${encodeURIComponent(id)}/events?${pFocus}`),
   ])
-  const items = [
+  const raw = [
     ...(r1.status === "fulfilled" ? r1.value.items || [] : []),
     ...(r2.status === "fulfilled" ? r2.value.items || [] : []),
   ]
+  // Deduplicate by id within this calendar (can appear in both default + focusTime)
+  const seen = new Set()
+  const items = raw.filter(e => { if (seen.has(e.id)) return false; seen.add(e.id); return true })
   return items.map(e => ({ id: e.id, summary: e.summary || (e.eventType === "focusTime" ? "Fokuszeit" : "Unbenannt"), start: e.start, end: e.end, eventType: e.eventType }))
 })
 
@@ -1086,7 +1089,13 @@ export default function App() {
           const newTime = `${pad(s.getHours())}:${pad(s.getMinutes())}`
           const newTitle = ev.summary || "Unbenannt"
 
-          const idx = current.findIndex(t => t.gcalId === ev.id)
+          // Primary dedup: gcalId. Fallback: title+date+time catches the same event
+          // appearing with different IDs in connected/shared Workspace calendars.
+          const byId    = current.findIndex(t => t.gcalId === ev.id)
+          const byMatch = byId === -1
+            ? current.findIndex(t => t.date === newDate && t.time === newTime && t.title === newTitle)
+            : -1
+          const idx = byId !== -1 ? byId : byMatch
           if (idx === -1) {
             current.push({ id: uid(), title: newTitle, date: newDate, time: newTime, duration: dur, label: lbl, priority: "P3", energy: 0, status: "open", gcalId: ev.id, allDay: isAllDay || undefined })
             added++
@@ -1186,6 +1195,8 @@ export default function App() {
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #D0D8EA; border-radius: 2px; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        /* Cover the iOS overscroll/safe-area gap below the app */
+        body::after { content: ""; position: fixed; bottom: 0; left: 0; right: 0; height: env(safe-area-inset-bottom); background: var(--color-bg); z-index: 1; }
         .list-group > div:last-child { border-bottom: none; }
       `}</style>
       <div style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", background: T.bg, color: T.text, height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden", paddingBottom: "env(safe-area-inset-bottom)" }}>
