@@ -833,7 +833,7 @@ export default function App() {
   const [syncing, setSyncing] = useState(false)
   const [toast,   setToast  ] = useState("")
   const [authed,  setAuthed ] = useState(false)
-  const [needsSecret, setNeedsSecret] = useState(false) // backend sync secret missing/wrong
+  const [needsSecret, setNeedsSecret] = useState(!localStorage.getItem("poco-secret"))
   const [calPicker, setCalPicker] = useState(null) // list of google cals for mapping UI
 
   const showToast = (m, ms = 3000) => { setToast(m); setTimeout(() => setToast(""), ms) }
@@ -992,11 +992,12 @@ export default function App() {
       setTasks(current)
       await persist(current, calMap)
       const parts = [added > 0 && `${added} neu`, updated > 0 && `${updated} aktualisiert`].filter(Boolean)
-      // Backend unreachable because secret missing/wrong → prompt for it
-      const needsSec = remoteErr === "api_unauthorized" || remoteErr === "no_secret"
-      setNeedsSecret(needsSec)
-      const remoteMsg = remoteOk ? "" : needsSec
-        ? " · Sync-Passwort nötig"
+      // Only prompt for the secret on explicit 401 — not on timeout/network errors
+      const wrongSecret = remoteErr === "api_unauthorized"
+      if (remoteOk) setNeedsSecret(false)
+      else if (wrongSecret) setNeedsSecret(true)
+      const remoteMsg = remoteOk ? "" : wrongSecret
+        ? " · Sync-Passwort falsch"
         : ` · Sync: ${remoteErr?.slice(0, 40) || "offline"}`
       showToast(parts.length > 0 ? `${parts.join(", ")} ✓${remoteMsg}` : `${current.length} Einträge · alles aktuell${remoteMsg}`, remoteOk ? 3000 : 8000)
     } catch (e) {
