@@ -1,4 +1,14 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
+
+function useWidth() {
+  const [w, setW] = useState(window.innerWidth)
+  useEffect(() => {
+    const fn = () => setW(window.innerWidth)
+    window.addEventListener("resize", fn)
+    return () => window.removeEventListener("resize", fn)
+  }, [])
+  return w
+}
 
 // ─── Design tokens ────────────────────────────────────────────
 const T = {
@@ -437,145 +447,108 @@ function HourGrid() {
   </>
 }
 
-// ─── DayView ──────────────────────────────────────────────────
-function DayView({ tasks, date, onTaskClick, onTimeClick }) {
-  const ref        = useRef()
-  const dk         = dKey(date)
-  const isToday    = dKey(new Date()) === dk
-  const allTasks   = tasks.filter(t => t.date === dk)
-  const allDayTask = allTasks.filter(t => t.allDay)
-  const timedTasks = allTasks.filter(t => !t.allDay)
+// ─── MultiDayView (DayView + WeekView unified) ────────────────
+function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick }) {
+  const ref   = useRef()
+  const today = dKey(new Date())
+  const days  = Array.from({ length: numDays }, (_, i) => dPlus(date, i))
+  const hasAllDay = days.some(d => tasks.some(t => t.date === dKey(d) && t.allDay))
 
   useEffect(() => {
+    const isToday = days.some(d => dKey(d) === today)
     if (ref.current) ref.current.scrollTop = isToday ? Math.max(0, tPx(nowT()) - 100) : tPx("07:30")
-  }, [dk])
+  }, [dKey(date)])
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      {allDayTask.length > 0 && (
-        <div style={{ background: T.surface, borderBottom: `1px solid ${T.border}`, padding: "6px 8px 6px", display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 9, color: T.muted, textTransform: "uppercase", letterSpacing: "0.08em", alignSelf: "center", minWidth: COL_W - 8, textAlign: "right", paddingRight: 6 }}>Ganztag</span>
-          {allDayTask.map(t => {
-            const lc = LC[t.label] || LC.Arbeit
+      {/* Day header row */}
+      <div style={{ display: "flex", background: T.surface, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+        <div style={{ width: COL_W, flexShrink: 0 }} />
+        {days.map(d => {
+          const dk = dKey(d); const isT = dk === today
+          return (
+            <div key={dk} style={{ flex: numDays === 1 ? 1 : undefined, width: numDays > 1 ? dayWidth : undefined, flexShrink: 0, textAlign: "center", padding: "8px 4px", borderLeft: `1px solid ${T.border}` }}>
+              <div style={{ fontSize: 9, color: T.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>{WDAY[d.getDay()]}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, width: 26, height: 26, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "3px auto 0", background: isT ? "#2563EB" : "transparent", color: isT ? "white" : T.text }}>
+                {d.getDate()}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* All-day strip */}
+      {hasAllDay && (
+        <div style={{ display: "flex", background: T.subtle, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+          <div style={{ width: COL_W, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 6 }}>
+            <span style={{ fontSize: 9, color: T.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Ganztag</span>
+          </div>
+          {days.map(d => {
+            const dk = dKey(d)
             return (
-              <div key={t.id} onClick={() => onTaskClick(t)} style={{ fontSize: 11, fontWeight: 600, color: lc.c, background: lc.bg, border: `1px solid ${lc.brd}`, borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>
-                {t.title}
+              <div key={dk} style={{ flex: numDays === 1 ? 1 : undefined, width: numDays > 1 ? dayWidth : undefined, flexShrink: 0, borderLeft: `1px solid ${T.border}`, padding: "3px 4px", display: "flex", flexDirection: "column", gap: 2 }}>
+                {tasks.filter(t => t.date === dk && t.allDay).map(t => {
+                  const lc = LC[t.label] || LC.Arbeit
+                  return (
+                    <div key={t.id} onClick={() => onTaskClick(t)} style={{ fontSize: 10, fontWeight: 600, color: lc.c, background: lc.bg, border: `1px solid ${lc.brd}`, borderRadius: 4, padding: "2px 5px", cursor: "pointer", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                      {t.title}
+                    </div>
+                  )
+                })}
               </div>
             )
           })}
         </div>
       )}
-      <div ref={ref} style={{ flex: 1, overflowY: "auto" }}>
-        <div style={{ display: "flex", minHeight: 24 * HOUR_H }}>
-          <div style={{ width: COL_W, flexShrink: 0, position: "sticky", left: 0, background: T.surface, zIndex: 5 }}>
-            {Array.from({ length: 24 }, (_, h) => (
-              <div key={h} style={{ position: "absolute", top: h * HOUR_H, right: 0, left: 0, display: "flex", justifyContent: "flex-end", paddingRight: 10, boxSizing: "border-box" }}>
-                {h ? <span style={{ fontSize: 10, color: T.dim, fontWeight: 500, transform: "translateY(-50%)", display: "block", background: T.surface, paddingLeft: 2 }}>{pad(h)}:00</span> : null}
+
+      {/* Timeline */}
+      <div ref={ref} style={{ flex: 1, overflowY: "auto", display: "flex" }}>
+        {/* Hour labels */}
+        <div style={{ width: COL_W, flexShrink: 0, position: "sticky", left: 0, background: T.surface, zIndex: 5 }}>
+          {Array.from({ length: 24 }, (_, h) => (
+            <div key={h} style={{ position: "absolute", top: h * HOUR_H, right: 0, left: 0, display: "flex", justifyContent: "flex-end", paddingRight: 8, boxSizing: "border-box" }}>
+              {h ? <span style={{ fontSize: 10, color: T.dim, fontWeight: 500, transform: "translateY(-50%)", display: "block", background: T.surface, paddingLeft: 2 }}>{pad(h)}:00</span> : null}
+            </div>
+          ))}
+        </div>
+        {/* Day columns */}
+        <div style={{ display: "flex", flex: 1, minHeight: 24 * HOUR_H }}>
+          {days.map(d => {
+            const dk = dKey(d); const isT = dk === today
+            const timedTasks = tasks.filter(t => t.date === dk && !t.allDay)
+            return (
+              <div key={dk} style={{ flex: numDays === 1 ? 1 : undefined, width: numDays > 1 ? dayWidth : undefined, flexShrink: 0, position: "relative", background: T.surface, borderLeft: `1px solid ${T.border}` }}
+                onClick={e => {
+                  const r = e.currentTarget.getBoundingClientRect()
+                  const y = e.clientY - r.top + (ref.current?.scrollTop || 0)
+                  const m = Math.round((y / HOUR_H) * 60 / 15) * 15
+                  numDays === 1
+                    ? onTimeClick(`${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`)
+                    : onTimeClick(`${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`, dk)
+                }}>
+                <HourGrid />
+                {isT && <NowLine />}
+                {timedTasks.map(t => <TaskBlock key={t.id} task={t} onClick={e => { e.stopPropagation(); onTaskClick(t) }} />)}
               </div>
-            ))}
-          </div>
-          <div style={{ flex: 1, position: "relative", background: T.surface, borderLeft: `1px solid ${T.border}` }}
-            onClick={e => {
-              const r = e.currentTarget.getBoundingClientRect()
-              const y = e.clientY - r.top + (ref.current?.scrollTop || 0)
-              const m = Math.round((y / HOUR_H) * 60 / 15) * 15
-              onTimeClick(`${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`)
-            }}>
-            <HourGrid />
-            {isToday && <NowLine />}
-            {timedTasks.map(t => <TaskBlock key={t.id} task={t} onClick={e => { e.stopPropagation(); onTaskClick(t) }} />)}
-          </div>
+            )
+          })}
         </div>
       </div>
     </div>
   )
 }
 
+function DayView({ tasks, date, onTaskClick, onTimeClick }) {
+  return <MultiDayView tasks={tasks} date={date} numDays={1} onTaskClick={onTaskClick} onTimeClick={onTimeClick} />
+}
+
 // ─── WeekView ─────────────────────────────────────────────────
-function WeekView({ tasks, date, onTaskClick, onTimeClick }) {
-  const ref   = useRef()
-  const mon   = getMon(date)
-  const days  = Array.from({ length: 7 }, (_, i) => dPlus(mon, i))
-  const today = dKey(new Date())
-
-  const DAY_W = 110 // fixed column width → 3 columns fill ~390px, rest scrolls
-
-  useEffect(() => { if (ref.current) ref.current.scrollTop = tPx("07:30") }, [])
-
+function WeekView({ tasks, date, dayWidth, onTaskClick, onTimeClick }) {
+  const mon = getMon(date)
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      {/* Horizontally scrollable wrapper for header + grid together */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflowX: "auto", overflowY: "hidden" }}>
-        {/* Day header row — scrolls horizontally with the grid */}
-        <div style={{ display: "flex", background: T.surface, borderBottom: `1px solid ${T.border}`, flexShrink: 0, minWidth: COL_W + DAY_W * 7 }}>
-          <div style={{ width: COL_W, flexShrink: 0 }} />
-          {days.map(d => {
-            const dk = dKey(d); const isT = dk === today
-            return (
-              <div key={dk} style={{ width: DAY_W, flexShrink: 0, textAlign: "center", padding: "8px 2px", borderLeft: `1px solid ${T.border}` }}>
-                <div style={{ fontSize: 9, color: T.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>{WDAY[d.getDay()]}</div>
-                <div style={{ fontSize: 13, fontWeight: 700, width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "3px auto 0", background: isT ? "#2563EB" : "transparent", color: isT ? "white" : T.text }}>
-                  {d.getDate()}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-
-        {/* All-day events row */}
-        {days.some(d => tasks.some(t => t.date === dKey(d) && t.allDay)) && (
-          <div style={{ display: "flex", background: T.subtle, borderBottom: `1px solid ${T.border}`, flexShrink: 0, minWidth: COL_W + DAY_W * 7 }}>
-            <div style={{ width: COL_W, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 6 }}>
-              <span style={{ fontSize: 9, color: T.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Ganztag</span>
-            </div>
-            {days.map(d => {
-              const dk = dKey(d)
-              const allDayHere = tasks.filter(t => t.date === dk && t.allDay)
-              return (
-                <div key={dk} style={{ width: DAY_W, flexShrink: 0, borderLeft: `1px solid ${T.border}`, padding: "3px 4px", display: "flex", flexDirection: "column", gap: 2 }}>
-                  {allDayHere.map(t => {
-                    const lc = LC[t.label] || LC.Arbeit
-                    return (
-                      <div key={t.id} onClick={() => onTaskClick(t)} style={{ fontSize: 10, fontWeight: 600, color: lc.c, background: lc.bg, border: `1px solid ${lc.brd}`, borderRadius: 4, padding: "2px 5px", cursor: "pointer", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
-                        {t.title}
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Vertical scroll for timeline */}
-        <div ref={ref} style={{ flex: 1, overflowY: "auto", overflowX: "visible", display: "flex", minWidth: COL_W + DAY_W * 7 }}>
-          <div style={{ width: COL_W, flexShrink: 0, position: "sticky", left: 0, background: T.surface, zIndex: 5 }}>
-            {Array.from({ length: 24 }, (_, h) => (
-              <div key={h} style={{ position: "absolute", top: h * HOUR_H, right: 0, left: 0, display: "flex", justifyContent: "flex-end", paddingRight: 8, boxSizing: "border-box" }}>
-                {h ? <span style={{ fontSize: 10, color: T.dim, fontWeight: 500, transform: "translateY(-50%)", display: "block", background: T.surface, paddingLeft: 2 }}>{pad(h)}:00</span> : null}
-              </div>
-            ))}
-          </div>
-          <div style={{ display: "flex", minHeight: 24 * HOUR_H, background: T.surface }}>
-            {days.map(d => {
-              const dk = dKey(d); const isT = dk === today
-              const dt = tasks.filter(t => t.date === dk && !t.allDay)
-              return (
-                <div key={dk} style={{ width: DAY_W, flexShrink: 0, position: "relative", borderLeft: `1px solid ${T.border}` }}
-                  onClick={e => {
-                    const r = e.currentTarget.getBoundingClientRect()
-                    const y = e.clientY - r.top + (ref.current?.scrollTop || 0)
-                    const m = Math.round((y / HOUR_H) * 60 / 15) * 15
-                    onTimeClick(`${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`, dk)
-                  }}>
-                  <HourGrid />
-                  {isT && <NowLine />}
-                  {dt.map(t => <TaskBlock key={t.id} task={t} onClick={e => { e.stopPropagation(); onTaskClick(t) }} />)}
-                </div>
-              )
-            })}
-          </div>
-        </div>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflowX: dayWidth ? "hidden" : "auto", overflowY: "hidden" }}>
+        <MultiDayView tasks={tasks} date={mon} numDays={7} dayWidth={dayWidth || 110} onTaskClick={onTaskClick} onTimeClick={onTimeClick} />
       </div>
     </div>
   )
@@ -864,6 +837,13 @@ function Toast({ msg }) {
 
 // ─── App ──────────────────────────────────────────────────────
 export default function App() {
+  const w = useWidth()
+  const isMobile = w < 700
+  // On desktop: how many days fit in the calendar area (minus time label column)
+  const calW    = w - (isMobile ? 0 : 32) // subtract page padding on desktop
+  const dayViewDays = isMobile ? 1 : Math.min(7, Math.max(3, Math.floor((calW - COL_W) / 160)))
+  const weekDayW    = isMobile ? 110 : Math.floor((calW - COL_W) / 7)
+
   const [tasks,   setTasks  ] = useState([])
   const [cals,    setCals   ] = useState({})
   const [budget,  setBudget ] = useState(8)
@@ -1079,46 +1059,58 @@ export default function App() {
         ::-webkit-scrollbar-thumb { background: #D0D8EA; border-radius: 2px; }
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
-      <div style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", background: T.bg, color: T.text, height: "100dvh", maxWidth: 430, margin: "0 auto", display: "flex", flexDirection: "column", overflow: "hidden", paddingBottom: "env(safe-area-inset-bottom)" }}>
-        <Header view={view} setView={setView} date={date} setDate={setDate}
-          onAdd={() => setModal({ task: view === "inbox" ? { date: "" } : {} })} syncing={syncing} onSync={doSync} />
-        {!authed && (
-          <button onClick={doLogin} style={{ margin: "8px 16px 0", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(37,99,235,0.25)", background: "rgba(37,99,235,0.06)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: "#2563EB", flexShrink: 0 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-              <path d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.83z" fill="#FBBC05"/>
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.83c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
-            </svg>
-            Mit Google anmelden & synchronisieren
-          </button>
-        )}
-        {view !== "inbox" && <LabelLegend />}
-        {view !== "inbox" && <EnergyBar tasks={tasks} date={date} budget={budget} onBudgetChange={handleBudget} />}
+      <div style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", background: T.bg, color: T.text, height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden", paddingBottom: isMobile ? "env(safe-area-inset-bottom)" : 0 }}>
+        {/* Centered chrome: header, login banner, legend, energy bar */}
+        <div style={{ maxWidth: isMobile ? "none" : 1400, width: "100%", margin: "0 auto", flexShrink: 0, display: "flex", flexDirection: "column" }}>
+          <Header view={view} setView={setView} date={date} setDate={setDate}
+            onAdd={() => setModal({ task: view === "inbox" ? { date: "" } : {} })} syncing={syncing} onSync={doSync} />
+          {!authed && (
+            <button onClick={doLogin} style={{ margin: "8px 16px 0", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(37,99,235,0.25)", background: "rgba(37,99,235,0.06)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: "#2563EB", flexShrink: 0 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.83z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.83c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
+              </svg>
+              Mit Google anmelden & synchronisieren
+            </button>
+          )}
+          {view !== "inbox" && <LabelLegend />}
+          {view !== "inbox" && <EnergyBar tasks={tasks} date={date} budget={budget} onBudgetChange={handleBudget} />}
+        </div>
 
+        {/* Content area — list/inbox centered, calendar full width */}
         {view === "inbox" && (
-          <InboxView tasks={tasks}
-            onTaskClick={t => setModal({ task: t })}
-            onAdd={partial => {
-              const t = { id: uid(), priority: "P3", energy: 0, status: "open", duration: 30, label: "Arbeit", time: nowT(), ...partial }
-              const updated = [...tasks, t]; setTasks(updated); store.tasks(updated)
-            }} />
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div style={{ flex: 1, maxWidth: isMobile ? "none" : 680, width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              <InboxView tasks={tasks}
+                onTaskClick={t => setModal({ task: t })}
+                onAdd={partial => {
+                  const t = { id: uid(), priority: "P3", energy: 0, status: "open", duration: 30, label: "Arbeit", time: nowT(), ...partial }
+                  const updated = [...tasks, t]; setTasks(updated); store.tasks(updated)
+                }} />
+            </div>
+          </div>
         )}
         {view === "day" && (
-          <DayView tasks={tasks} date={date}
+          <MultiDayView tasks={tasks} date={date} numDays={dayViewDays} dayWidth={dayViewDays > 1 ? Math.floor((calW - COL_W) / dayViewDays) : undefined}
             onTaskClick={t => setModal({ task: t })}
-            onTimeClick={t => setModal({ task: { time: t, date: dKey(date) } })} />
+            onTimeClick={(t, d) => setModal({ task: { time: t, date: d ?? dKey(date) } })} />
         )}
         {view === "week" && (
-          <WeekView tasks={tasks} date={date}
+          <WeekView tasks={tasks} date={date} dayWidth={isMobile ? undefined : weekDayW}
             onTaskClick={t => setModal({ task: t })}
             onTimeClick={(t, d) => setModal({ task: { time: t, date: d } })} />
         )}
         {view === "list" && (
-          <ListView tasks={tasks} date={date}
-            onTaskClick={t => setModal({ task: t })}
-            onAdd={dk => setModal({ task: { date: dk } })}
-            onToggleDone={handleToggleDone} />
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div style={{ flex: 1, maxWidth: isMobile ? "none" : 680, width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              <ListView tasks={tasks} date={date}
+                onTaskClick={t => setModal({ task: t })}
+                onAdd={dk => setModal({ task: { date: dk } })}
+                onToggleDone={handleToggleDone} />
+            </div>
+          </div>
         )}
 
         {modal && <TaskModal task={modal.task} onSave={handleSave} onDelete={handleDelete} onClose={() => setModal(null)} />}
@@ -1128,7 +1120,7 @@ export default function App() {
         <button
           onClick={() => setModal({ task: view === "inbox" ? { date: "" } : {} })}
           style={{
-            position: "fixed", bottom: `calc(24px + env(safe-area-inset-bottom))`, right: 20,
+            position: "fixed", bottom: `calc(24px + env(safe-area-inset-bottom))`, right: isMobile ? 20 : 32,
             width: 56, height: 56, borderRadius: 28,
             border: "none", background: "#2563EB", color: "white",
             fontSize: 28, fontWeight: 300, lineHeight: 1,
