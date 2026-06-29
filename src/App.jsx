@@ -849,29 +849,59 @@ const TAB_ICONS = {
   ),
 }
 const TAB_LABELS = { inbox: "Inbox", list: "Liste", day: "Tag", week: "Woche" }
+const TABS = ["inbox", "list", "day", "week"]
 
-function TabBar({ view, setView, isMobile }) {
-  const tabs = ["inbox", "list", "day", "week"]
+function TabBar({ view, setView }) {
+  const activeIdx = TABS.indexOf(view)
   return (
     <div style={{
-      position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 90,
-      background: "rgba(255,255,255,0.92)", backdropFilter: "blur(16px)",
-      borderTop: `1px solid ${T.border}`,
-      paddingBottom: "env(safe-area-inset-bottom)",
-      display: "flex",
+      position: "fixed",
+      bottom: "calc(16px + env(safe-area-inset-bottom))",
+      left: "50%", transform: "translateX(-50%)",
+      zIndex: 90,
+      background: "rgba(255,255,255,0.82)",
+      backdropFilter: "blur(20px)",
+      WebkitBackdropFilter: "blur(20px)",
+      borderRadius: 32,
+      border: "1px solid rgba(255,255,255,0.6)",
+      boxShadow: "0 8px 32px rgba(0,0,0,0.12), 0 1px 0 rgba(255,255,255,0.8) inset",
+      padding: "6px",
+      display: "flex", gap: 2,
+      // min-content width so pill wraps tightly on phone
     }}>
-      {tabs.map(v => {
+      {/* Sliding blob behind active tab */}
+      <div style={{
+        position: "absolute",
+        top: 6,
+        left: `calc(6px + ${activeIdx} * (100% - 12px) / 4)`,
+        width: "calc((100% - 12px) / 4)",
+        bottom: 6,
+        background: "rgba(37,99,235,0.12)",
+        borderRadius: 26,
+        transition: "left 0.28s cubic-bezier(0.34,1.56,0.64,1)",
+        pointerEvents: "none",
+      }} />
+
+      {TABS.map((v, i) => {
         const active = view === v
         return (
           <button key={v} onClick={() => setView(v)} style={{
-            flex: 1, border: "none", background: "transparent", cursor: "pointer",
-            padding: "10px 0 10px", display: "flex", flexDirection: "column",
+            position: "relative",
+            border: "none", background: "transparent", cursor: "pointer",
+            padding: "8px 16px", borderRadius: 26,
+            display: "flex", flexDirection: "column",
             alignItems: "center", gap: 3,
-            color: active ? "#2563EB" : T.muted,
-            transition: "color 0.15s",
+            color: active ? "#2563EB" : "var(--color-text-muted)",
+            transition: "color 0.2s",
+            minWidth: 64,
           }}>
             {TAB_ICONS[v]}
-            <span style={{ fontSize: 10, fontWeight: active ? 600 : 400, fontFamily: "inherit", letterSpacing: "0.01em" }}>
+            <span style={{
+              fontSize: 10,
+              fontWeight: active ? 600 : 400,
+              fontFamily: "inherit",
+              letterSpacing: "0.01em",
+            }}>
               {TAB_LABELS[v]}
             </span>
           </button>
