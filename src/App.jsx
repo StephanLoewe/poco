@@ -50,7 +50,7 @@ const EC = [
   { v:  2, icon: "▸▸", l: "Anstrengend",       c: "#EA580C" },
   { v:  3, icon: "▸▸▸",l: "Sehr anstrengend",  c: "#DC2626" },
 ]
-const APP_VERSION = "1.7"
+const APP_VERSION = "1.8"
 const DURS = [2, 15, 30, 45, 60, 90, 120, 150, 180, 240]
 const DL   = { 2:"2min", 15:"15min", 30:"30min", 45:"45min", 60:"1h", 90:"1.5h", 120:"2h", 150:"2.5h", 180:"3h", 240:"4h" }
 const WDAY = ["So","Mo","Di","Mi","Do","Fr","Sa"]
@@ -1065,6 +1065,14 @@ export default function App() {
       } else {
         base = localTasks
       }
+      // Deduplicate base by gcalId — same calendar event may have been imported
+      // independently on different devices with different app-internal ids
+      const seenGcal = new Set()
+      base = base.filter(t => {
+        if (!t.gcalId) return true          // inbox/manual tasks: keep all
+        if (seenGcal.has(t.gcalId)) return false
+        seenGcal.add(t.gcalId); return true
+      })
       const current = [...base]; let added = 0; let updated = 0
 
       // ±2 Wochen um heute
