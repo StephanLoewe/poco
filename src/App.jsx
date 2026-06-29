@@ -18,7 +18,7 @@ const T = {
   subtle:  "#EFF2F9",
   text:    "#1A2340",
   muted:   "#8896B3",
-  dim:     "#C8D2E4",
+  dim:     "#A0AEBF",
 }
 
 // ─── Constants ────────────────────────────────────────────────
@@ -26,12 +26,16 @@ const HOUR_H = 60
 const COL_W  = 46
 
 const LABELS = ["Arbeit", "Soziales", "Fun", "Tasks"]
+// solid: full-color bg with white text (for calendar blocks)
+// pastel: light bg with colored text (for chips, list badges)
 const LC = {
-  Arbeit:   { c: "#2563EB", bg: "#E8EEFB", brd: "#BACAF5" },
-  Soziales: { c: "#DB2777", bg: "#FBEAF3", brd: "#F2AACD" },
-  Fun:      { c: "#059669", bg: "#E5F5F0", brd: "#9ED9C5" },
-  Tasks:    { c: "#6D28D9", bg: "#EDE8F9", brd: "#C5B0EF" },
+  Arbeit:   { solid: "#2563EB", solidDark: "#1D4ED8", pastel: "#E8EEFB", pastelText: "#2563EB", pastelBrd: "#BACAF5" },
+  Soziales: { solid: "#DB2777", solidDark: "#BE185D", pastel: "#FBEAF3", pastelText: "#DB2777", pastelBrd: "#F2AACD" },
+  Fun:      { solid: "#059669", solidDark: "#047857", pastel: "#E5F5F0", pastelText: "#059669", pastelBrd: "#9ED9C5" },
+  Tasks:    { solid: "#6D28D9", solidDark: "#5B21B6", pastel: "#EDE8F9", pastelText: "#6D28D9", pastelBrd: "#C5B0EF" },
 }
+// Backwards-compat shim: old code used lc.c / lc.bg / lc.brd
+Object.values(LC).forEach(lc => { lc.c = lc.pastelText; lc.bg = lc.pastel; lc.brd = lc.pastelBrd })
 const PC = {
   P1: { l: "Kritisch", c: "#EF4444" },
   P2: { l: "Hoch",     c: "#F97316" },
@@ -45,7 +49,7 @@ const EC = [
   { v:  2, icon: "▸▸", l: "Anstrengend",       c: "#EA580C" },
   { v:  3, icon: "▸▸▸",l: "Sehr anstrengend",  c: "#DC2626" },
 ]
-const APP_VERSION = "1.5"
+const APP_VERSION = "1.6"
 const DURS = [2, 15, 30, 45, 60, 90, 120, 150, 180, 240]
 const DL   = { 2:"2min", 15:"15min", 30:"30min", 45:"45min", 60:"1h", 90:"1.5h", 120:"2h", 150:"2.5h", 180:"3h", 240:"4h" }
 const WDAY = ["So","Mo","Di","Mi","Do","Fr","Sa"]
@@ -375,30 +379,31 @@ function TaskBlock({ task, onClick }) {
   const ht   = dPx(task.duration)
   const tiny = ht < 34
   const done = task.status === "done"
-  const en   = eCnf(task.energy)
-  const pr   = PC[task.priority]
 
   return (
     <div onClick={onClick} style={{
       position: "absolute", top, left: 4, right: 4, height: ht, minHeight: 22,
-      background: done ? T.subtle : lc.bg,
-      borderLeft: `3px solid ${done ? T.dim : lc.c}`,
-      border: `1px solid ${done ? T.border : lc.brd}`,
+      background: lc.solid,
       borderRadius: 8,
       padding: tiny ? "2px 7px" : "5px 8px",
       cursor: "pointer", overflow: "hidden", boxSizing: "border-box",
-      opacity: done ? 0.55 : 1, transition: "opacity 0.2s",
-      display: "flex", alignItems: tiny ? "center" : "flex-start",
-      flexDirection: "column", justifyContent: tiny ? "center" : "flex-start",
+      opacity: done ? 0.45 : 1, transition: "opacity 0.15s",
+      display: "flex", flexDirection: "column",
+      alignItems: "flex-start", justifyContent: tiny ? "center" : "flex-start",
     }}>
-      <div style={{ display: "flex", alignItems: "center", width: "100%", gap: 4 }}>
-        <span style={{ flex: 1, fontSize: tiny ? 10 : 12, fontWeight: 600, color: done ? T.dim : lc.c, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", textDecoration: done ? "line-through" : "none" }}>
-          {task.title}
+      <span style={{
+        fontSize: tiny ? 10 : 12, fontWeight: 600, color: "white",
+        overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
+        width: "100%", textDecoration: done ? "line-through" : "none",
+        opacity: done ? 0.7 : 1,
+      }}>
+        {task.title}
+      </span>
+      {!tiny && (
+        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.75)", marginTop: 1 }}>
+          {task.time} – {eAdd(task.time, task.duration)}
         </span>
-        <span style={{ fontSize: 10, color: en.c, flexShrink: 0 }}>{en.icon}</span>
-        <span style={{ fontSize: 9, color: pr.c, fontWeight: 700, flexShrink: 0 }}>{task.priority}</span>
-      </div>
-      {!tiny && <span style={{ fontSize: 10, color: T.muted, marginTop: 1 }}>{task.time} – {eAdd(task.time, task.duration)}</span>}
+      )}
     </div>
   )
 }
@@ -754,7 +759,7 @@ function LabelLegend() {
 }
 
 // ─── Header ───────────────────────────────────────────────────
-function Header({ view, setView, date, setDate, onAdd, syncing, onSync }) {
+function Header({ view, date, setDate, syncing, onSync }) {
   const isToday = dKey(date) === dKey(new Date())
 
   const nav = (dir) => {
@@ -763,44 +768,96 @@ function Header({ view, setView, date, setDate, onAdd, syncing, onSync }) {
     setDate(dt)
   }
 
-  const title = view === "day"
-    ? date.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" })
+  const title = view === "inbox" ? "Inbox"
+    : view === "list" ? (() => { const m = getMon(date); const s = dPlus(m, 6); return `${m.getDate()}. – ${s.getDate()}. ${MON[s.getMonth()]}` })()
+    : view === "day" ? date.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" })
     : (() => { const m = getMon(date); const s = dPlus(m, 6); return `${m.getDate()}. ${MON[m.getMonth()]} – ${s.getDate()}. ${MON[s.getMonth()]}` })()
 
-  const viewOpts = [{ v: "inbox", l: "Inbox" }, { v: "list", l: "Liste" }, { v: "day", l: "Tag" }, { v: "week", l: "Woche" }]
-
   return (
-    <div style={{ padding: "max(14px, env(safe-area-inset-top)) 16px 10px", background: T.surface, borderBottom: `1px solid ${T.border}`, flexShrink: 0, boxShadow: "0 1px 0 rgba(0,0,0,0.04)" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <div style={{ display: "flex", background: T.subtle, borderRadius: 10, padding: 3 }}>
-          {viewOpts.map(({ v, l }) => (
-            <button key={v} onClick={() => setView(v)} style={{
-              padding: "5px 9px", borderRadius: 7, border: "none", cursor: "pointer", fontFamily: "inherit",
-              fontSize: 12, fontWeight: 500, transition: "all 0.15s",
-              background: view === v ? T.surface : "transparent",
-              color: view === v ? "#2563EB" : T.muted,
-              boxShadow: view === v ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
-            }}>{l}</button>
-          ))}
+    <div style={{ padding: "max(14px, env(safe-area-inset-top)) 16px 12px", background: T.surface, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {view !== "inbox" && (
+            <button onClick={() => nav(-1)} style={{ background: "transparent", border: "none", color: T.muted, cursor: "pointer", fontSize: 22, padding: "0 4px", lineHeight: 1, display: "flex", alignItems: "center" }}>‹</button>
+          )}
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: (isToday && view !== "inbox" && view !== "list") ? "#2563EB" : T.text, letterSpacing: "-0.01em" }}>{title}</div>
+            {!isToday && view !== "inbox" && view !== "list" && (
+              <button onClick={() => setDate(new Date())} style={{ fontSize: 11, color: "#2563EB", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0, marginTop: 1 }}>Heute</button>
+            )}
+          </div>
+          {view !== "inbox" && (
+            <button onClick={() => nav(1)} style={{ background: "transparent", border: "none", color: T.muted, cursor: "pointer", fontSize: 22, padding: "0 4px", lineHeight: 1, display: "flex", alignItems: "center" }}>›</button>
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ fontSize: 10, color: T.dim }}>v{APP_VERSION}</span>
-          <button onClick={onSync} disabled={syncing} title="Sync mit Google Kalender"
+          <button onClick={onSync} disabled={syncing} title="Sync"
             style={{ width: 34, height: 34, borderRadius: 10, border: `1px solid ${T.border}`, background: T.surface, color: syncing ? "#2563EB" : T.muted, cursor: syncing ? "default" : "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", animation: syncing ? "spin 1s linear infinite" : "none" }}>
             ↻
           </button>
         </div>
       </div>
-      {view !== "inbox" && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <button onClick={() => nav(-1)} style={{ background: "transparent", border: "none", color: T.muted, cursor: "pointer", fontSize: 20, padding: "2px 8px", lineHeight: 1 }}>‹</button>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: isToday ? "#2563EB" : T.text, lineHeight: 1.3 }}>{title}</div>
-            {!isToday && <button onClick={() => setDate(new Date())} style={{ fontSize: 10, color: "#2563EB", background: "transparent", border: "none", cursor: "pointer", marginTop: 2, fontFamily: "inherit", padding: 0 }}>→ Heute</button>}
-          </div>
-          <button onClick={() => nav(1)} style={{ background: "transparent", border: "none", color: T.muted, cursor: "pointer", fontSize: 20, padding: "2px 8px", lineHeight: 1 }}>›</button>
-        </div>
-      )}
+    </div>
+  )
+}
+
+// ─── TabBar ───────────────────────────────────────────────────
+const TAB_ICONS = {
+  inbox: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
+      <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>
+    </svg>
+  ),
+  list: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+      <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+    </svg>
+  ),
+  day: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+      <line x1="8" y1="14" x2="8" y2="18"/>
+    </svg>
+  ),
+  week: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+      <line x1="7" y1="14" x2="7" y2="18"/><line x1="12" y1="14" x2="12" y2="18"/><line x1="17" y1="14" x2="17" y2="18"/>
+    </svg>
+  ),
+}
+const TAB_LABELS = { inbox: "Inbox", list: "Liste", day: "Tag", week: "Woche" }
+
+function TabBar({ view, setView, isMobile }) {
+  const tabs = ["inbox", "list", "day", "week"]
+  return (
+    <div style={{
+      position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 90,
+      background: "rgba(255,255,255,0.92)", backdropFilter: "blur(16px)",
+      borderTop: `1px solid ${T.border}`,
+      paddingBottom: "env(safe-area-inset-bottom)",
+      display: "flex",
+    }}>
+      {tabs.map(v => {
+        const active = view === v
+        return (
+          <button key={v} onClick={() => setView(v)} style={{
+            flex: 1, border: "none", background: "transparent", cursor: "pointer",
+            padding: "10px 0 10px", display: "flex", flexDirection: "column",
+            alignItems: "center", gap: 3,
+            color: active ? "#2563EB" : T.muted,
+            transition: "color 0.15s",
+          }}>
+            {TAB_ICONS[v]}
+            <span style={{ fontSize: 10, fontWeight: active ? 600 : 400, fontFamily: "inherit", letterSpacing: "0.01em" }}>
+              {TAB_LABELS[v]}
+            </span>
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -809,7 +866,7 @@ function Header({ view, setView, date, setDate, onAdd, syncing, onSync }) {
 function Toast({ msg }) {
   if (!msg) return null
   return (
-    <div style={{ position: "fixed", bottom: 28, left: "50%", transform: "translateX(-50%)", background: T.text, borderRadius: 20, padding: "8px 18px", fontSize: 12, color: "white", zIndex: 200, whiteSpace: "nowrap", boxShadow: "0 8px 24px rgba(0,0,0,0.18)" }}>
+    <div style={{ position: "fixed", bottom: "calc(72px + env(safe-area-inset-bottom))", left: "50%", transform: "translateX(-50%)", background: T.text, borderRadius: 20, padding: "8px 18px", fontSize: 12, color: "white", zIndex: 200, whiteSpace: "nowrap", boxShadow: "0 8px 24px rgba(0,0,0,0.18)" }}>
       {msg}
     </div>
   )
@@ -1075,11 +1132,10 @@ export default function App() {
         ::-webkit-scrollbar-thumb { background: #D0D8EA; border-radius: 2px; }
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
-      <div style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", background: T.bg, color: T.text, height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden", paddingBottom: isMobile ? "env(safe-area-inset-bottom)" : 0 }}>
+      <div style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", background: T.bg, color: T.text, height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden", paddingBottom: "calc(62px + env(safe-area-inset-bottom))" }}>
         {/* Centered chrome: header, login banner, legend, energy bar */}
         <div style={{ maxWidth: isMobile ? "none" : 1400, width: "100%", margin: "0 auto", flexShrink: 0, display: "flex", flexDirection: "column" }}>
-          <Header view={view} setView={setView} date={date} setDate={setDate}
-            onAdd={() => setModal({ task: view === "inbox" ? { date: "" } : {} })} syncing={syncing} onSync={doSync} />
+          <Header view={view} date={date} setDate={setDate} syncing={syncing} onSync={doSync} />
           {!authed && (
             <button onClick={doLogin} style={{ margin: "8px 16px 0", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(37,99,235,0.25)", background: "rgba(37,99,235,0.06)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: "#2563EB", flexShrink: 0 }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
@@ -1137,16 +1193,17 @@ export default function App() {
         {modal && <TaskModal task={modal.task} onSave={handleSave} onDelete={handleDelete} onClose={() => setModal(null)} />}
         {calPicker && <CalendarMapModal googleCals={calPicker.list} onSave={handleCalMapSave} onSkip={handleCalMapSkip} />}
         <Toast msg={toast} />
+        <TabBar view={view} setView={setView} isMobile={isMobile} />
 
         <button
           onClick={() => setModal({ task: view === "inbox" ? { date: "" } : {} })}
           style={{
-            position: "fixed", bottom: `calc(24px + env(safe-area-inset-bottom))`, right: isMobile ? 20 : 32,
-            width: 56, height: 56, borderRadius: 28,
+            position: "fixed", bottom: `calc(72px + env(safe-area-inset-bottom))`, right: isMobile ? 16 : 32,
+            width: 52, height: 52, borderRadius: 26,
             border: "none", background: "#2563EB", color: "white",
-            fontSize: 28, fontWeight: 300, lineHeight: 1,
+            fontSize: 26, fontWeight: 300, lineHeight: 1,
             display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 4px 16px rgba(37,99,235,0.45)",
+            boxShadow: "0 4px 16px rgba(37,99,235,0.4)",
             cursor: "pointer", zIndex: 100,
           }}>
           +
