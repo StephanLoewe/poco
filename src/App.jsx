@@ -635,18 +635,19 @@ function SwipeRow({ task, onClick, onToggleDone }) {
 
   return (
     <div style={{ position: "relative", overflow: "hidden" }}>
-      {/* Background action hint */}
-      <div style={{
-        position: "absolute", left: 0, top: 0, bottom: 0,
-        width: offset, display: "flex", alignItems: "center", paddingLeft: 16,
-        background: done ? "var(--label-fun-pastel)" : lc.solid,
-        borderRadius: 0, transition: offset === 0 ? "width 0.2s" : "none",
-        overflow: "hidden",
-      }}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ opacity: Math.min(1, offset / THRESHOLD) }}>
-          <path d={done ? "M19 6l-10 10-4-4" : "M5 12l5 5L19 7"} stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </div>
+      {/* Background action hint — only rendered while swiping */}
+      {offset > 0 && (
+        <div style={{
+          position: "absolute", left: 0, top: 0, bottom: 0,
+          width: offset, display: "flex", alignItems: "center", paddingLeft: 16,
+          background: done ? "var(--label-fun-pastel)" : lc.solid,
+          transition: "none", overflow: "hidden",
+        }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ opacity: Math.min(1, offset / THRESHOLD) }}>
+            <path d={done ? "M19 6l-10 10-4-4" : "M5 12l5 5L19 7"} stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+      )}
 
       {/* Row content */}
       <div
