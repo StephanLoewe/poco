@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react"
+import "./tokens.css"
 
 function useWidth() {
   const [w, setW] = useState(window.innerWidth)
@@ -10,15 +11,17 @@ function useWidth() {
   return w
 }
 
-// ─── Design tokens ────────────────────────────────────────────
+// ─── Design tokens ─────────────────────────────────────────────
+// Values reference CSS custom properties from tokens.css,
+// which mirrors the Figma variable collections exactly.
 const T = {
-  bg:      "#F4F6FB",
-  surface: "#FFFFFF",
-  border:  "#E6EAF4",
-  subtle:  "#EFF2F9",
-  text:    "#1A2340",
-  muted:   "#8896B3",
-  dim:     "#A0AEBF",
+  bg:      "var(--color-bg)",
+  surface: "var(--color-surface)",
+  border:  "var(--color-border)",
+  subtle:  "var(--color-subtle)",
+  text:    "var(--color-text-primary)",
+  muted:   "var(--color-text-muted)",
+  dim:     "var(--color-text-dim)",
 }
 
 // ─── Constants ────────────────────────────────────────────────
@@ -26,13 +29,11 @@ const HOUR_H = 60
 const COL_W  = 46
 
 const LABELS = ["Arbeit", "Soziales", "Fun", "Tasks"]
-// solid: full-color bg with white text (for calendar blocks)
-// pastel: light bg with colored text (for chips, list badges)
 const LC = {
-  Arbeit:   { solid: "#2563EB", solidDark: "#1D4ED8", pastel: "#E8EEFB", pastelText: "#2563EB", pastelBrd: "#BACAF5" },
-  Soziales: { solid: "#DB2777", solidDark: "#BE185D", pastel: "#FBEAF3", pastelText: "#DB2777", pastelBrd: "#F2AACD" },
-  Fun:      { solid: "#059669", solidDark: "#047857", pastel: "#E5F5F0", pastelText: "#059669", pastelBrd: "#9ED9C5" },
-  Tasks:    { solid: "#6D28D9", solidDark: "#5B21B6", pastel: "#EDE8F9", pastelText: "#6D28D9", pastelBrd: "#C5B0EF" },
+  Arbeit:   { solid: "var(--label-arbeit-solid)",   solidDark: "var(--label-arbeit-dark)",   pastel: "var(--label-arbeit-pastel)",   pastelText: "var(--label-arbeit-text)",   pastelBrd: "var(--label-arbeit-border)"   },
+  Soziales: { solid: "var(--label-soziales-solid)", solidDark: "var(--label-soziales-dark)", pastel: "var(--label-soziales-pastel)", pastelText: "var(--label-soziales-text)", pastelBrd: "var(--label-soziales-border)" },
+  Fun:      { solid: "var(--label-fun-solid)",      solidDark: "var(--label-fun-dark)",      pastel: "var(--label-fun-pastel)",      pastelText: "var(--label-fun-text)",      pastelBrd: "var(--label-fun-border)"      },
+  Tasks:    { solid: "var(--label-tasks-solid)",    solidDark: "var(--label-tasks-dark)",    pastel: "var(--label-tasks-pastel)",    pastelText: "var(--label-tasks-text)",    pastelBrd: "var(--label-tasks-border)"    },
 }
 // Backwards-compat shim: old code used lc.c / lc.bg / lc.brd
 Object.values(LC).forEach(lc => { lc.c = lc.pastelText; lc.bg = lc.pastel; lc.brd = lc.pastelBrd })

@@ -1,0 +1,87 @@
+/* ─── Poco Design Tokens ─────────────────────────────────────
+   Single source of truth — mirrors the Figma variable collections.
+   Primitives → raw values. Semantics → alias primitives.
+   ──────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Primitives ── */
+  --blue-100: #E8EEFB;
+  --blue-200: #BACAF5;
+  --blue-500: #2563EB;
+  --blue-600: #1D4ED8;
+
+  --pink-100: #FBEAF3;
+  --pink-200: #F2AACD;
+  --pink-500: #DB2777;
+  --pink-600: #BE185D;
+
+  --green-100: #E5F5F0;
+  --green-200: #9ED9C5;
+  --green-500: #059669;
+  --green-600: #047857;
+
+  --purple-100: #EDE8F9;
+  --purple-200: #C5B0EF;
+  --purple-500: #6D28D9;
+  --purple-600: #5B21B6;
+
+  --gray-0:   #FFFFFF;
+  --gray-100: #F4F6FB;
+  --gray-150: #EFF2F9;
+  --gray-200: #E6EAF4;
+  --gray-400: #A0AEBF;
+  --gray-500: #8896B3;
+  --gray-900: #1A2340;
+
+  --red-500:  #EF4444;
+
+  /* ── Semantic Color ── */
+  --color-bg:           var(--gray-100);
+  --color-surface:      var(--gray-0);
+  --color-border:       var(--gray-200);
+  --color-subtle:       var(--gray-150);
+  --color-text-primary: var(--gray-900);
+  --color-text-muted:   var(--gray-500);
+  --color-text-dim:     var(--gray-400);
+
+  /* ── Label — Arbeit ── */
+  --label-arbeit-solid:  var(--blue-500);
+  --label-arbeit-dark:   var(--blue-600);
+  --label-arbeit-pastel: var(--blue-100);
+  --label-arbeit-border: var(--blue-200);
+  --label-arbeit-text:   var(--blue-500);
+
+  /* ── Label — Soziales ── */
+  --label-soziales-solid:  var(--pink-500);
+  --label-soziales-dark:   var(--pink-600);
+  --label-soziales-pastel: var(--pink-100);
+  --label-soziales-border: var(--pink-200);
+  --label-soziales-text:   var(--pink-500);
+
+  /* ── Label — Fun ── */
+  --label-fun-solid:  var(--green-500);
+  --label-fun-dark:   var(--green-600);
+  --label-fun-pastel: var(--green-100);
+  --label-fun-border: var(--green-200);
+  --label-fun-text:   var(--green-500);
+
+  /* ── Label — Tasks ── */
+  --label-tasks-solid:  var(--purple-500);
+  --label-tasks-dark:   var(--purple-600);
+  --label-tasks-pastel: var(--purple-100);
+  --label-tasks-border: var(--purple-200);
+  --label-tasks-text:   var(--purple-500);
+
+  /* ── Spacing ── */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  /* ── Radius ── */
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-full: 28px;
+}
