@@ -168,59 +168,64 @@ const gDel = (id, eid) => withAuth(() =>
 const DRIVE_FILE = "poco-data.json"
 let _driveFileId = null
 
-async function driveApi(method, path, body, params) {
-  const url = new URL(`https://www.googleapis.com${path}`)
-  if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
+async function driveAuthFetch(url, opts = {}) {
   const r = await fetch(url, {
-    method,
-    headers: {
-      Authorization: `Bearer ${_accessToken}`,
-      ...(body ? { "Content-Type": "application/json" } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
+    ...opts,
+    headers: { Authorization: `Bearer ${_accessToken}`, ...(opts.headers || {}) },
   })
   if (r.status === 401) { _accessToken = null; throw new Error("token_expired") }
-  if (!r.ok) throw new Error(`Drive API ${r.status}`)
-  if (r.status === 204) return { ok: true }
-  return r.json()
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "")
+    throw new Error(`Drive ${r.status}: ${txt.slice(0, 120)}`)
+  }
+  return r
 }
 
 async function driveRead() {
   return withAuth(async () => {
-    // Find file in appDataFolder
-    const list = await driveApi("GET", "/drive/v3/files", null, {
-      spaces: "appDataFolder",
-      q: `name = '${DRIVE_FILE}'`,
-      fields: "files(id)",
-    })
+    const url = new URL("https://www.googleapis.com/drive/v3/files")
+    url.searchParams.set("spaces", "appDataFolder")
+    url.searchParams.set("q", `name = '${DRIVE_FILE}'`)
+    url.searchParams.set("fields", "files(id)")
+    const list = await (await driveAuthFetch(url)).json()
     if (!list.files?.length) return null
     _driveFileId = list.files[0].id
-    const r = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${_driveFileId}?alt=media`,
-      { headers: { Authorization: `Bearer ${_accessToken}` } }
+    const r = await driveAuthFetch(
+      `https://www.googleapis.com/drive/v3/files/${_driveFileId}?alt=media`
     )
-    if (!r.ok) return null
     return r.json()
   })
 }
 
 async function driveWrite(data) {
   return withAuth(async () => {
-    const body = JSON.stringify({ version: 1, ...data })
+    const content = JSON.stringify({ version: 1, ...data })
     if (_driveFileId) {
-      // Update existing file
-      await fetch(
+      // Update content of existing file
+      await driveAuthFetch(
         `https://www.googleapis.com/upload/drive/v3/files/${_driveFileId}?uploadType=media`,
-        { method: "PATCH", headers: { Authorization: `Bearer ${_accessToken}`, "Content-Type": "application/json" }, body }
+        { method: "PATCH", headers: { "Content-Type": "application/json" }, body: content }
       )
     } else {
-      // Create new file in appDataFolder
-      const meta = await driveApi("POST", "/drive/v3/files", { name: DRIVE_FILE, parents: ["appDataFolder"] })
-      _driveFileId = meta.id
-      await fetch(
-        `https://www.googleapis.com/upload/drive/v3/files/${_driveFileId}?uploadType=media`,
-        { method: "PATCH", headers: { Authorization: `Bearer ${_accessToken}`, "Content-Type": "application/json" }, body }
+      // Create with multipart: metadata + content in one request
+      const boundary = "foo_bar_baz"
+      const multipart = [
+        `--${boundary}`,
+        "Content-Type: application/json",
+        "",
+        JSON.stringify({ name: DRIVE_FILE, parents: ["appDataFolder"] }),
+        `--${boundary}`,
+        "Content-Type: application/json",
+        "",
+        content,
+        `--${boundary}--`,
+      ].join("\r\n")
+      const r = await driveAuthFetch(
+        "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+        { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipart }
       )
+      const meta = await r.json()
+      _driveFileId = meta.id
     }
   })
 }
@@ -943,8 +948,8 @@ export default function App() {
       showToast("Synchronisiere …", 15000)
 
       // Load latest state from Drive first (picks up changes from other devices)
-      let driveData = null
-      try { driveData = await driveRead() } catch (driveErr) { console.warn("Drive read failed:", driveErr?.message) }
+      let driveData = null; let driveReadErr = null
+      try { driveData = await driveRead() } catch (driveErr) { console.warn("Drive read:", driveErr?.message); driveReadErr = driveErr?.message }
       const driveOk = !!driveData
       const localTasks = store.load().tasks
       // Merge: Drive is source of truth for status/prio/energy, but keep any
@@ -999,8 +1004,8 @@ export default function App() {
       setTasks(current)
       await persist(current, calMap)
       const parts = [added > 0 && `${added} neu`, updated > 0 && `${updated} aktualisiert`].filter(Boolean)
-      const driveMsg = driveOk ? "" : " · Drive offline"
-      showToast(parts.length > 0 ? `${parts.join(", ")} ✓${driveMsg}` : `${current.length} Einträge · alles aktuell${driveMsg}`)
+      const driveMsg = driveOk ? "" : ` · Drive: ${driveReadErr?.slice(0, 40) || "offline"}`
+      showToast(parts.length > 0 ? `${parts.join(", ")} ✓${driveMsg}` : `${current.length} Einträge · alles aktuell${driveMsg}`, driveOk ? 3000 : 8000)
     } catch (e) {
       console.error(e)
       showToast(e.message || "Sync-Fehler", 8000)
