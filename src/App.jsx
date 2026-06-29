@@ -50,7 +50,7 @@ const EC = [
   { v:  2, icon: "▸▸", l: "Anstrengend",       c: "#EA580C" },
   { v:  3, icon: "▸▸▸",l: "Sehr anstrengend",  c: "#DC2626" },
 ]
-const APP_VERSION = "1.9"
+const APP_VERSION = "2.1"
 const DURS = [2, 15, 30, 45, 60, 90, 120, 150, 180, 240]
 const DL   = { 2:"2min", 15:"15min", 30:"30min", 45:"45min", 60:"1h", 90:"1.5h", 120:"2h", 150:"2.5h", 180:"3h", 240:"4h" }
 const WDAY = ["So","Mo","Di","Mi","Do","Fr","Sa"]
@@ -157,8 +157,15 @@ const gEvents = (id, a, b) => withAuth(async () => {
     calApi("GET", `/calendars/${encodeURIComponent(id)}/events?${p}`),
     calApi("GET", `/calendars/${encodeURIComponent(id)}/events?${pFocus}`),
   ])
+  // If the primary (default) fetch failed, return null so the caller can tell
+  // "fetch failed" apart from "no events" — critical to avoid wrongly deleting
+  // tasks for a calendar that just had a transient error (401/403/network).
+  if (r1.status !== "fulfilled") {
+    console.warn("gEvents default fetch failed:", r1.reason?.message)
+    return null
+  }
   const raw = [
-    ...(r1.status === "fulfilled" ? r1.value.items || [] : []),
+    ...(r1.value.items || []),
     ...(r2.status === "fulfilled" ? r2.value.items || [] : []),
   ]
   // Deduplicate by id within this calendar (can appear in both default + focusTime)
