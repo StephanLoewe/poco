@@ -68,10 +68,14 @@ const TZ    = Intl.DateTimeFormat().resolvedOptions().timeZone
 let _tokenClient = null
 let _accessToken = null
 
-const SCOPES = [
-  "https://www.googleapis.com/auth/calendar",
-  "https://www.googleapis.com/auth/drive.appdata",
-].join(" ")
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.appdata"
+const CAL_SCOPE   = "https://www.googleapis.com/auth/calendar"
+const SCOPES      = [CAL_SCOPE, DRIVE_SCOPE].join(" ")
+
+// Promise that rejects if it doesn't settle within ms — guards against
+// blocked popups / stalled network that would otherwise hang sync forever.
+const withTimeout = (p, ms, label = "Timeout") =>
+  Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(label)), ms))])
 
 function getTokenClient() {
   if (_tokenClient) return _tokenClient
@@ -81,19 +85,6 @@ function getTokenClient() {
     callback: () => {},
   })
   return _tokenClient
-}
-
-// Force re-consent to upgrade scopes (e.g. when Drive returns 403)
-function requestConsent() {
-  return new Promise((resolve, reject) => {
-    const client = getTokenClient()
-    client.callback = (resp) => {
-      if (resp.error) { reject(new Error(resp.error)); return }
-      _accessToken = resp.access_token
-      resolve()
-    }
-    client.requestAccessToken({ prompt: "consent" })
-  })
 }
 
 // Waits for the GIS script to finish loading (it has async attribute).
@@ -212,16 +203,10 @@ async function driveReadInner() {
 }
 
 async function driveRead() {
-  return withAuth(async () => {
-    try {
-      return await driveReadInner()
-    } catch (e) {
-      if (e.message !== "drive_forbidden") throw e
-      // Scope missing — request consent and retry once
-      await requestConsent()
-      return await driveReadInner()
-    }
-  })
+  // No consent popup here — scope is acquired at login (user gesture).
+  // If the scope is missing this throws drive_forbidden and the caller
+  // treats Drive as offline rather than hanging on a blocked popup.
+  return withAuth(driveReadInner)
 }
 
 async function driveWriteInner(content) {
@@ -252,16 +237,7 @@ async function driveWriteInner(content) {
 }
 
 async function driveWrite(data) {
-  return withAuth(async () => {
-    const content = JSON.stringify({ version: 1, ...data })
-    try {
-      await driveWriteInner(content)
-    } catch (e) {
-      if (e.message !== "drive_forbidden") throw e
-      await requestConsent()
-      await driveWriteInner(content)
-    }
-  })
+  return withAuth(() => driveWriteInner(JSON.stringify({ version: 1, ...data })))
 }
 
 // ─── Storage (localStorage) ───────────────────────────────────
@@ -932,18 +908,24 @@ export default function App() {
     })
   }
 
-  // Direkt aus User-Gesture aufrufen — kein await davor, sonst blockt Mobile Safari den Popup
+  // Direkt aus User-Gesture aufrufen — kein await davor, sonst blockt Mobile Safari den Popup.
+  // Beim ersten Mal (oder solange Drive nicht freigegeben ist) erzwingen wir den
+  // Consent-Screen, damit der drive.appdata-Scope sicher erteilt wird.
   const doLogin = () => {
     if (!window.google?.accounts?.oauth2) { showToast("App lädt noch, kurz warten …", 3000); return }
     const client = getTokenClient()
+    const driveGranted = localStorage.getItem("poco-drive-ok") === "1"
     client.callback = (resp) => {
       if (resp.error) { showToast("Anmeldung fehlgeschlagen: " + resp.error, 5000); return }
       _accessToken = resp.access_token
+      const hasDrive = window.google.accounts.oauth2.hasGrantedAllScopes(resp, DRIVE_SCOPE)
+      if (hasDrive) localStorage.setItem("poco-drive-ok", "1")
+      else localStorage.removeItem("poco-drive-ok")
       setAuthed(true)
-      showToast("Angemeldet, synchronisiere …", 3000)
+      showToast(hasDrive ? "Angemeldet, synchronisiere …" : "Angemeldet (Drive nicht freigegeben)", 4000)
       setTimeout(() => doSyncRef.current?.(), 300)
     }
-    client.requestAccessToken({ prompt: "" })
+    client.requestAccessToken({ prompt: driveGranted ? "" : "consent" })
   }
 
   const handleCalMapSave = (map) => {
@@ -960,13 +942,16 @@ export default function App() {
     calPicker.resolve(null)
   }
 
-  // Persist to both localStorage (fast/offline) and Drive (cross-device)
+  // Persist to both localStorage (fast/offline) and Drive (cross-device).
+  // localStorage write is synchronous and always succeeds; Drive is best-effort
+  // with a timeout so a stalled request can never freeze the UI.
   const persist = async (newTasks, newCals, newBudget) => {
     const t = newTasks  ?? store.load().tasks
     const c = newCals   ?? store.load().cals
     const b = newBudget ?? store.load().budget
     store.tasks(t); store.cals(c); store.budget(b)
-    try { await driveWrite({ tasks: t, cals: c, budget: b }) } catch {}
+    try { await withTimeout(driveWrite({ tasks: t, cals: c, budget: b }), 12000) }
+    catch (e) { console.warn("Drive write:", e?.message) }
   }
 
   const doSync = async () => {
@@ -981,9 +966,11 @@ export default function App() {
 
       showToast("Synchronisiere …", 15000)
 
-      // Load latest state from Drive first (picks up changes from other devices)
+      // Load latest state from Drive first (picks up changes from other devices).
+      // Timeout-guarded so a stalled request can't freeze the sync.
       let driveData = null; let driveReadErr = null
-      try { driveData = await driveRead() } catch (driveErr) { console.warn("Drive read:", driveErr?.message); driveReadErr = driveErr?.message }
+      try { driveData = await withTimeout(driveRead(), 12000) }
+      catch (driveErr) { console.warn("Drive read:", driveErr?.message); driveReadErr = driveErr?.message }
       const driveOk = !!driveData
       const localTasks = store.load().tasks
       // Merge: Drive is source of truth for status/prio/energy, but keep any
@@ -1038,14 +1025,20 @@ export default function App() {
       setTasks(current)
       await persist(current, calMap)
       const parts = [added > 0 && `${added} neu`, updated > 0 && `${updated} aktualisiert`].filter(Boolean)
-      const driveMsg = driveOk ? "" : ` · Drive: ${driveReadErr?.slice(0, 40) || "offline"}`
+      // Drive failed because scope was never granted → guide user to re-login
+      const needsConsent = driveReadErr === "drive_forbidden"
+      const driveMsg = driveOk ? "" : needsConsent
+        ? " · Drive: bitte neu anmelden für Geräte-Sync"
+        : ` · Drive: ${driveReadErr?.slice(0, 40) || "offline"}`
+      if (needsConsent) localStorage.removeItem("poco-drive-ok")
       showToast(parts.length > 0 ? `${parts.join(", ")} ✓${driveMsg}` : `${current.length} Einträge · alles aktuell${driveMsg}`, driveOk ? 3000 : 8000)
     } catch (e) {
       console.error(e)
       showToast(e.message || "Sync-Fehler", 8000)
       if (e.message === "token_expired") setAuthed(false)
+    } finally {
+      setSyncing(false)
     }
-    setSyncing(false)
   }
 
   const handleSave = async (f) => {
