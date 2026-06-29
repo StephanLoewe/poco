@@ -45,7 +45,7 @@ const EC = [
   { v:  2, icon: "▸▸", l: "Anstrengend",       c: "#EA580C" },
   { v:  3, icon: "▸▸▸",l: "Sehr anstrengend",  c: "#DC2626" },
 ]
-const APP_VERSION = "1.4"
+const APP_VERSION = "1.5"
 const DURS = [2, 15, 30, 45, 60, 90, 120, 150, 180, 240]
 const DL   = { 2:"2min", 15:"15min", 30:"30min", 45:"45min", 60:"1h", 90:"1.5h", 120:"2h", 150:"2.5h", 180:"3h", 240:"4h" }
 const WDAY = ["So","Mo","Di","Mi","Do","Fr","Sa"]
@@ -68,9 +68,7 @@ const TZ    = Intl.DateTimeFormat().resolvedOptions().timeZone
 let _tokenClient = null
 let _accessToken = null
 
-const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.appdata"
-const CAL_SCOPE   = "https://www.googleapis.com/auth/calendar"
-const SCOPES      = [CAL_SCOPE, DRIVE_SCOPE].join(" ")
+const SCOPES = "https://www.googleapis.com/auth/calendar"
 
 // Promise that rejects if it doesn't settle within ms — guards against
 // blocked popups / stalled network that would otherwise hang sync forever.
@@ -181,74 +179,30 @@ const gDel = (id, eid) => withAuth(() =>
   calApi("DELETE", `/calendars/${encodeURIComponent(id)}/events/${eid}`)
 )
 
-// ─── Google Drive appdata sync ────────────────────────────────
-const DRIVE_FILE = "poco-data.json"
-let _driveFileId = null
+// ─── Backend sync (Netlify Function + Blobs) ──────────────────
+// One small JSON document holds the whole app state, shared across devices.
+// Auth is a single shared secret (POCO_SECRET on Netlify), entered once per
+// device and stored in localStorage. No OAuth/popups for data — Google is
+// used only for the (read-only) calendar import.
+const API_URL = "/api/data"
+const apiSecret = () => localStorage.getItem("poco-secret") || ""
 
-async function driveAuthFetch(url, opts = {}) {
-  const r = await fetch(url, {
-    ...opts,
-    headers: { Authorization: `Bearer ${_accessToken}`, ...(opts.headers || {}) },
-  })
-  if (r.status === 401) { _accessToken = null; throw new Error("token_expired") }
-  if (r.status === 403) { throw new Error("drive_forbidden") }
-  if (!r.ok) {
-    const txt = await r.text().catch(() => "")
-    throw new Error(`Drive ${r.status}: ${txt.slice(0, 120)}`)
-  }
-  return r
-}
-
-async function driveReadInner() {
-  const url = new URL("https://www.googleapis.com/drive/v3/files")
-  url.searchParams.set("spaces", "appDataFolder")
-  url.searchParams.set("q", `name = '${DRIVE_FILE}'`)
-  url.searchParams.set("fields", "files(id)")
-  const list = await (await driveAuthFetch(url)).json()
-  if (!list.files?.length) return null
-  _driveFileId = list.files[0].id
-  const r = await driveAuthFetch(
-    `https://www.googleapis.com/drive/v3/files/${_driveFileId}?alt=media`
-  )
+async function apiRead() {
+  const r = await fetch(API_URL, { headers: { Authorization: `Bearer ${apiSecret()}` } })
+  if (r.status === 401) throw new Error("api_unauthorized")
+  if (!r.ok) throw new Error(`API ${r.status}`)
   return r.json()
 }
 
-async function driveRead() {
-  // No consent popup here — scope is acquired at login (user gesture).
-  // If the scope is missing this throws drive_forbidden and the caller
-  // treats Drive as offline rather than hanging on a blocked popup.
-  return withAuth(driveReadInner)
-}
-
-async function driveWriteInner(content) {
-  if (_driveFileId) {
-    await driveAuthFetch(
-      `https://www.googleapis.com/upload/drive/v3/files/${_driveFileId}?uploadType=media`,
-      { method: "PATCH", headers: { "Content-Type": "application/json" }, body: content }
-    )
-  } else {
-    const boundary = "poco_boundary"
-    const multipart = [
-      `--${boundary}`,
-      "Content-Type: application/json",
-      "",
-      JSON.stringify({ name: DRIVE_FILE, parents: ["appDataFolder"] }),
-      `--${boundary}`,
-      "Content-Type: application/json",
-      "",
-      content,
-      `--${boundary}--`,
-    ].join("\r\n")
-    const r = await driveAuthFetch(
-      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
-      { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipart }
-    )
-    _driveFileId = (await r.json()).id
-  }
-}
-
-async function driveWrite(data) {
-  return withAuth(() => driveWriteInner(JSON.stringify({ version: 1, ...data })))
+async function apiWrite(data) {
+  const r = await fetch(API_URL, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${apiSecret()}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ version: 1, ...data }),
+  })
+  if (r.status === 401) throw new Error("api_unauthorized")
+  if (!r.ok) throw new Error(`API ${r.status}`)
+  return r.json()
 }
 
 // ─── Storage (localStorage) ───────────────────────────────────
@@ -879,7 +833,7 @@ export default function App() {
   const [syncing, setSyncing] = useState(false)
   const [toast,   setToast  ] = useState("")
   const [authed,  setAuthed ] = useState(false)
-  const [driveForbidden, setDriveForbidden] = useState(false) // token lacks drive scope
+  const [needsSecret, setNeedsSecret] = useState(false) // backend sync secret missing/wrong
   const [calPicker, setCalPicker] = useState(null) // list of google cals for mapping UI
 
   const showToast = (m, ms = 3000) => { setToast(m); setTimeout(() => setToast(""), ms) }
@@ -893,11 +847,7 @@ export default function App() {
       // On success authed flips → the [authed,cals] effect runs doSync.
       // On failure the "Anmelden" banner stays visible.
       acquireToken("")
-        .then(resp => {
-          const hasDrive = window.google.accounts.oauth2.hasGrantedAllScopes(resp, DRIVE_SCOPE)
-          if (hasDrive) localStorage.setItem("poco-drive-ok", "1")
-          setAuthed(true)
-        })
+        .then(() => setAuthed(true))
         .catch(() => showToast("Zum Synchronisieren anmelden", 4000))
     } else {
       showToast("Anmelden um Google Kalender zu verbinden", 5000)
@@ -927,22 +877,17 @@ export default function App() {
   }
 
   // Direkt aus User-Gesture aufrufen — kein await davor, sonst blockt Mobile Safari den Popup.
-  // forceConsent=true erzwingt den Consent-Screen (z.B. um Drive nachträglich freizugeben).
-  const doLogin = (forceConsent = false) => {
+  // Nur noch für den (read-only) Google-Kalender — Daten-Sync läuft übers Backend.
+  const doLogin = () => {
     if (!window.google?.accounts?.oauth2) { showToast("App lädt noch, kurz warten …", 3000); return }
-    const driveGranted = localStorage.getItem("poco-drive-ok") === "1"
     const client = getTokenClient()
     client.callback = (resp) => {
       if (resp.error) { showToast("Anmeldung fehlgeschlagen: " + resp.error, 5000); return }
       _accessToken = resp.access_token
-      const hasDrive = window.google.accounts.oauth2.hasGrantedAllScopes(resp, DRIVE_SCOPE)
-      if (hasDrive) localStorage.setItem("poco-drive-ok", "1")
-      else localStorage.removeItem("poco-drive-ok")
-      setDriveForbidden(!hasDrive)
       setAuthed(true) // triggers the [authed,cals] effect → doSync
-      showToast(hasDrive ? "Angemeldet, synchronisiere …" : "Drive wurde nicht freigegeben", 5000)
+      showToast("Angemeldet, synchronisiere …", 3000)
     }
-    client.requestAccessToken({ prompt: (forceConsent || !driveGranted) ? "consent" : "" })
+    client.requestAccessToken({ prompt: "" })
   }
 
   const handleCalMapSave = (map) => {
@@ -959,16 +904,17 @@ export default function App() {
     calPicker.resolve(null)
   }
 
-  // Persist to both localStorage (fast/offline) and Drive (cross-device).
-  // localStorage write is synchronous and always succeeds; Drive is best-effort
-  // with a timeout so a stalled request can never freeze the UI.
+  // Persist to both localStorage (fast/offline) and the backend (cross-device).
+  // localStorage write is synchronous and always succeeds; the backend is
+  // best-effort with a timeout so a stalled request can never freeze the UI.
   const persist = async (newTasks, newCals, newBudget) => {
     const t = newTasks  ?? store.load().tasks
     const c = newCals   ?? store.load().cals
     const b = newBudget ?? store.load().budget
     store.tasks(t); store.cals(c); store.budget(b)
-    try { await withTimeout(driveWrite({ tasks: t, cals: c, budget: b }), 12000) }
-    catch (e) { console.warn("Drive write:", e?.message) }
+    if (!apiSecret()) return
+    try { await withTimeout(apiWrite({ tasks: t, cals: c, budget: b }), 12000) }
+    catch (e) { console.warn("Backend write:", e?.message); if (e.message === "api_unauthorized") setNeedsSecret(true) }
   }
 
   const doSync = async () => {
@@ -983,20 +929,24 @@ export default function App() {
 
       showToast("Synchronisiere …", 15000)
 
-      // Load latest state from Drive first (picks up changes from other devices).
+      // Load latest state from the backend first (picks up other devices).
       // Timeout-guarded so a stalled request can't freeze the sync.
-      let driveData = null; let driveReadErr = null
-      try { driveData = await withTimeout(driveRead(), 12000) }
-      catch (driveErr) { console.warn("Drive read:", driveErr?.message); driveReadErr = driveErr?.message }
-      const driveOk = !!driveData
+      let remoteData = null; let remoteErr = null
+      if (apiSecret()) {
+        try { remoteData = await withTimeout(apiRead(), 12000) }
+        catch (e) { console.warn("Backend read:", e?.message); remoteErr = e?.message }
+      } else {
+        remoteErr = "no_secret"
+      }
+      const remoteOk = !!remoteData
       const localTasks = store.load().tasks
-      // Merge: Drive is source of truth for status/prio/energy, but keep any
-      // local tasks that Drive doesn't know about yet (e.g. first sync on new device)
+      // Merge: backend is source of truth for status/prio/energy, but keep any
+      // local tasks the backend doesn't know yet (first sync on a new device)
       let base
-      if (driveData?.tasks) {
-        const driveIds = new Set(driveData.tasks.map(t => t.id))
-        const localOnly = localTasks.filter(t => !driveIds.has(t.id))
-        base = [...driveData.tasks, ...localOnly]
+      if (remoteData?.tasks) {
+        const remoteIds = new Set(remoteData.tasks.map(t => t.id))
+        const localOnly = localTasks.filter(t => !remoteIds.has(t.id))
+        base = [...remoteData.tasks, ...localOnly]
       } else {
         base = localTasks
       }
@@ -1042,14 +992,13 @@ export default function App() {
       setTasks(current)
       await persist(current, calMap)
       const parts = [added > 0 && `${added} neu`, updated > 0 && `${updated} aktualisiert`].filter(Boolean)
-      // Drive failed because scope was never granted → show a re-consent button
-      const needsConsent = driveReadErr === "drive_forbidden"
-      setDriveForbidden(needsConsent)
-      if (needsConsent) localStorage.removeItem("poco-drive-ok")
-      const driveMsg = driveOk ? "" : needsConsent
-        ? " · Drive nicht freigegeben"
-        : ` · Drive: ${driveReadErr?.slice(0, 40) || "offline"}`
-      showToast(parts.length > 0 ? `${parts.join(", ")} ✓${driveMsg}` : `${current.length} Einträge · alles aktuell${driveMsg}`, driveOk ? 3000 : 8000)
+      // Backend unreachable because secret missing/wrong → prompt for it
+      const needsSec = remoteErr === "api_unauthorized" || remoteErr === "no_secret"
+      setNeedsSecret(needsSec)
+      const remoteMsg = remoteOk ? "" : needsSec
+        ? " · Sync-Passwort nötig"
+        : ` · Sync: ${remoteErr?.slice(0, 40) || "offline"}`
+      showToast(parts.length > 0 ? `${parts.join(", ")} ✓${remoteMsg}` : `${current.length} Einträge · alles aktuell${remoteMsg}`, remoteOk ? 3000 : 8000)
     } catch (e) {
       console.error(e)
       if (e.message === "token_expired" || e.message === "not_authed" || e.message === "auth_timeout") {
@@ -1102,6 +1051,17 @@ export default function App() {
     setTasks(updated); persist(updated)
   }
 
+  // Ask for the shared sync password (POCO_SECRET) and re-sync
+  const handleSetSecret = () => {
+    const cur = apiSecret()
+    const v = window.prompt("Sync-Passwort (auf allen Geräten gleich):", cur)
+    if (v == null) return
+    localStorage.setItem("poco-secret", v.trim())
+    setNeedsSecret(false)
+    showToast("Passwort gespeichert, synchronisiere …", 3000)
+    setTimeout(() => doSyncRef.current?.(), 300)
+  }
+
   return (
     <>
       <style>{`
@@ -1129,9 +1089,9 @@ export default function App() {
               Mit Google anmelden & synchronisieren
             </button>
           )}
-          {authed && driveForbidden && (
-            <button onClick={() => doLogin(true)} style={{ margin: "8px 16px 0", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(234,88,12,0.3)", background: "rgba(234,88,12,0.08)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: "#EA580C", flexShrink: 0 }}>
-              ⚠️ Drive für Geräte-Sync freigeben
+          {needsSecret && (
+            <button onClick={handleSetSecret} style={{ margin: "8px 16px 0", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(234,88,12,0.3)", background: "rgba(234,88,12,0.08)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: "#EA580C", flexShrink: 0 }}>
+              🔑 Sync-Passwort eingeben
             </button>
           )}
           {view !== "inbox" && <LabelLegend />}
