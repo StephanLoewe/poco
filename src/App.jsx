@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import "./tokens.css"
 import { T, HOUR_H, COL_W, LABELS, LC, PC, EC, APP_VERSION, DURS, DL, WDAY, MON } from "./lib/constants.js"
+import { uid, pad, dKey, nowT, tPx, dPx, eAdd, eCnf, getMon, dPlus, TZ, withTimeout } from "./lib/helpers.js"
 
 function useWidth() {
   const [w, setW] = useState(window.innerWidth)
@@ -12,29 +13,11 @@ function useWidth() {
   return w
 }
 
-// ─── Helpers ──────────────────────────────────────────────────
-const uid   = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
-const pad   = (n) => String(n).padStart(2, "0")
-const dKey  = (d) => { const dt = new Date(d); return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}` }
-const nowT  = () => { const n = new Date(); return `${pad(n.getHours())}:${pad(n.getMinutes())}` }
-const tPx   = (t) => { if (!t) return 0; const [h, m] = t.split(":").map(Number); return (h + m / 60) * HOUR_H }
-const dPx   = (m) => Math.max(22, (m / 60) * HOUR_H)
-const eAdd  = (t, m) => { const [h, mn] = t.split(":").map(Number); const tot = h * 60 + mn + m; return `${pad(Math.floor(tot / 60) % 24)}:${pad(tot % 60)}` }
-const eCnf  = (v) => EC.find(e => e.v === v) || EC[1]
-const getMon= (d) => { const dt = new Date(d); dt.setHours(0,0,0,0); const dy = dt.getDay(); dt.setDate(dt.getDate() + (dy === 0 ? -6 : 1 - dy)); return dt }
-const dPlus = (d, n) => { const dt = new Date(d); dt.setDate(dt.getDate() + n); return dt }
-const TZ    = Intl.DateTimeFormat().resolvedOptions().timeZone
-
 // ─── Google OAuth (GIS token model) ───────────────────────────
 let _tokenClient = null
 let _accessToken = null
 
 const SCOPES = "https://www.googleapis.com/auth/calendar"
-
-// Promise that rejects if it doesn't settle within ms — guards against
-// blocked popups / stalled network that would otherwise hang sync forever.
-const withTimeout = (p, ms, label = "Timeout") =>
-  Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(label)), ms))])
 
 function getTokenClient() {
   if (_tokenClient) return _tokenClient
