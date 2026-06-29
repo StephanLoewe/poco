@@ -50,7 +50,7 @@ const EC = [
   { v:  2, icon: "▸▸", l: "Anstrengend",       c: "#EA580C" },
   { v:  3, icon: "▸▸▸",l: "Sehr anstrengend",  c: "#DC2626" },
 ]
-const APP_VERSION = "1.8"
+const APP_VERSION = "1.9"
 const DURS = [2, 15, 30, 45, 60, 90, 120, 150, 180, 240]
 const DL   = { 2:"2min", 15:"15min", 30:"30min", 45:"45min", 60:"1h", 90:"1.5h", 120:"2h", 150:"2.5h", 180:"3h", 240:"4h" }
 const WDAY = ["So","Mo","Di","Mi","Do","Fr","Sa"]
@@ -386,26 +386,28 @@ function TaskBlock({ task, onClick }) {
 
   return (
     <div onClick={onClick} style={{
-      position: "absolute", top, left: 4, right: 4, height: ht, minHeight: 22,
+      position: "absolute", top, left: 3, right: 3, height: ht, minHeight: 24,
       background: lc.solid,
-      borderRadius: 8,
-      padding: tiny ? "2px 7px" : "5px 8px",
+      borderRadius: 7,
+      borderTop: `2px solid rgba(255,255,255,0.25)`,
+      padding: tiny ? "2px 6px" : "5px 7px",
       cursor: "pointer", overflow: "hidden", boxSizing: "border-box",
-      opacity: done ? 0.45 : 1, transition: "opacity 0.15s",
+      opacity: done ? 0.4 : 1, transition: "opacity 0.15s",
       display: "flex", flexDirection: "column",
       alignItems: "flex-start", justifyContent: tiny ? "center" : "flex-start",
+      boxShadow: done ? "none" : "0 2px 8px rgba(0,0,0,0.15)",
     }}>
       <span style={{
-        fontSize: tiny ? 10 : 12, fontWeight: 600, color: "white",
+        fontSize: tiny ? 9 : 11, fontWeight: 700, color: "white",
         overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
         width: "100%", textDecoration: done ? "line-through" : "none",
-        opacity: done ? 0.7 : 1,
+        lineHeight: 1.3,
       }}>
         {task.title}
       </span>
-      {!tiny && (
-        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.75)", marginTop: 1 }}>
-          {task.time} – {eAdd(task.time, task.duration)}
+      {!tiny && ht >= 44 && (
+        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.8)", marginTop: 1, lineHeight: 1.2 }}>
+          {task.time}
         </span>
       )}
     </div>
@@ -587,13 +589,75 @@ function ListView({ tasks, date, onTaskClick, onAdd, onToggleDone }) {
 
             {(open.length > 0 || done.length > 0) && (
               <div className="list-group" style={{ background: T.surface, borderRadius: 12, padding: "0 14px", border: `1px solid ${T.border}` }}>
-                {open.map(t => <ListRow key={t.id} task={t} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />)}
-                {done.map(t => <ListRow key={t.id} task={t} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />)}
+                {open.map(t => <SwipeRow key={t.id} task={t} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />)}
+                {done.map(t => <SwipeRow key={t.id} task={t} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />)}
               </div>
             )}
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ─── SwipeRow ─────────────────────────────────────────────────
+function SwipeRow({ task, onClick, onToggleDone }) {
+  const ref      = useRef()
+  const startX   = useRef(null)
+  const curX     = useRef(0)
+  const [offset, setOffset] = useState(0)
+  const [swiped, setSwiped] = useState(false)
+  const THRESHOLD = 72
+
+  const onTouchStart = (e) => {
+    startX.current = e.touches[0].clientX
+    curX.current = 0
+    setSwiped(false)
+  }
+  const onTouchMove = (e) => {
+    const dx = e.touches[0].clientX - startX.current
+    if (dx < 0) return // only right-to-left
+    curX.current = dx
+    setOffset(Math.min(dx, THRESHOLD + 16))
+  }
+  const onTouchEnd = () => {
+    if (curX.current >= THRESHOLD) {
+      setSwiped(true)
+      setOffset(THRESHOLD)
+      setTimeout(() => { onToggleDone(); setOffset(0); setSwiped(false) }, 300)
+    } else {
+      setOffset(0)
+    }
+  }
+
+  const done = task.status === "done"
+  const lc   = LC[task.label] || LC.Arbeit
+
+  return (
+    <div style={{ position: "relative", overflow: "hidden" }}>
+      {/* Background action hint */}
+      <div style={{
+        position: "absolute", left: 0, top: 0, bottom: 0,
+        width: offset, display: "flex", alignItems: "center", paddingLeft: 16,
+        background: done ? "var(--label-fun-pastel)" : lc.solid,
+        borderRadius: 0, transition: offset === 0 ? "width 0.2s" : "none",
+        overflow: "hidden",
+      }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ opacity: Math.min(1, offset / THRESHOLD) }}>
+          <path d={done ? "M19 6l-10 10-4-4" : "M5 12l5 5L19 7"} stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+
+      {/* Row content */}
+      <div
+        ref={ref}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{ transform: `translateX(${offset}px)`, transition: offset === 0 ? "transform 0.2s" : "none" }}
+      >
+        <ListRow task={task} onClick={onClick} onToggleDone={onToggleDone} />
+      </div>
     </div>
   )
 }
@@ -666,7 +730,7 @@ function ListRow({ task, onClick, onToggleDone }) {
 }
 
 // ─── InboxView ────────────────────────────────────────────────
-function InboxView({ tasks, onTaskClick, onAdd }) {
+function InboxView({ tasks, onTaskClick, onAdd, onToggleDone }) {
   const [input, setInput] = useState("")
   const inboxTasks = tasks.filter(t => !t.date)
   const open = inboxTasks.filter(t => t.status !== "done")
@@ -693,7 +757,7 @@ function InboxView({ tasks, onTaskClick, onAdd }) {
         <button onClick={handleAdd} style={{ width: 40, height: 40, borderRadius: 10, border: "none", background: input.trim() ? "#2563EB" : T.subtle, color: input.trim() ? "white" : T.dim, cursor: input.trim() ? "pointer" : "default", fontSize: 20, flexShrink: 0, transition: "all 0.15s" }}>+</button>
       </div>
 
-      <div style={{ flex: 1, padding: "14px 16px 32px" }}>
+      <div style={{ padding: "14px 16px 32px" }}>
         {inboxTasks.length === 0 && (
           <div style={{ textAlign: "center", padding: "48px 0" }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>📥</div>
@@ -702,41 +766,20 @@ function InboxView({ tasks, onTaskClick, onAdd }) {
           </div>
         )}
 
-        {open.map(t => <InboxRow key={t.id} task={t} onClick={() => onTaskClick(t)} />)}
-
-        {done.length > 0 && (
-          <>
-            <div style={{ fontSize: 10, color: T.dim, textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 18, marginBottom: 8 }}>Erledigt</div>
-            {done.map(t => <InboxRow key={t.id} task={t} onClick={() => onTaskClick(t)} />)}
-          </>
+        {(open.length > 0 || done.length > 0) && (
+          <div className="list-group" style={{ background: T.surface, borderRadius: 12, padding: "0 14px", border: `1px solid ${T.border}` }}>
+            {open.map(t => (
+              <SwipeRow key={t.id} task={t} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />
+            ))}
+            {done.length > 0 && open.length > 0 && (
+              <div style={{ fontSize: 10, color: T.dim, textTransform: "uppercase", letterSpacing: "0.08em", padding: "10px 0 4px" }}>Erledigt</div>
+            )}
+            {done.map(t => (
+              <SwipeRow key={t.id} task={t} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />
+            ))}
+          </div>
         )}
       </div>
-    </div>
-  )
-}
-
-function InboxRow({ task, onClick }) {
-  const lc   = LC[task.label] || LC.Arbeit
-  const pr   = PC[task.priority]
-  const done = task.status === "done"
-
-  return (
-    <div onClick={onClick} style={{
-      background: T.surface, borderRadius: 12,
-      border: `1px solid ${done ? T.border : lc.brd}`,
-      borderLeft: `3px solid ${done ? T.dim : lc.c}`,
-      padding: "11px 14px", marginBottom: 6,
-      cursor: "pointer", display: "flex", alignItems: "center", gap: 10,
-      opacity: done ? 0.52 : 1, transition: "all 0.15s",
-    }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: done ? T.dim : T.text, textDecoration: done ? "line-through" : "none", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
-          {task.title}
-        </div>
-        <div style={{ fontSize: 11, color: lc.c, fontWeight: 500, marginTop: 2 }}>{task.label}</div>
-      </div>
-      <div style={{ fontSize: 10, fontWeight: 700, color: pr.c, flexShrink: 0 }}>{task.priority}</div>
-      <div style={{ fontSize: 11, color: T.dim, flexShrink: 0 }}>→ Datum</div>
     </div>
   )
 }
@@ -1236,6 +1279,7 @@ export default function App() {
             <div style={{ flex: 1, maxWidth: isMobile ? "none" : 680, width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", overflow: "hidden" }}>
               <InboxView tasks={tasks}
                 onTaskClick={t => setModal({ task: t })}
+                onToggleDone={handleToggleDone}
                 onAdd={partial => {
                   const t = { id: uid(), priority: "P3", energy: 0, status: "open", duration: 30, label: "Arbeit", time: nowT(), ...partial }
                   const updated = [...tasks, t]; setTasks(updated); store.tasks(updated)
