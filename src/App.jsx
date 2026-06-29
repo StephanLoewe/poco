@@ -1203,8 +1203,7 @@ export default function App() {
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #D0D8EA; border-radius: 2px; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        /* Cover the iOS overscroll/safe-area gap below the app */
-        body::after { content: ""; position: fixed; bottom: 0; left: 0; right: 0; height: env(safe-area-inset-bottom); background: var(--color-bg); z-index: 1; }
+        .ios-bg-patch { position: fixed; bottom: 0; left: 0; right: 0; height: 60px; background: #F4F6FB; z-index: 0; pointer-events: none; }
         .list-group > div:last-child { border-bottom: none; }
       `}</style>
       <div style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", background: T.bg, color: T.text, height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden", paddingBottom: "env(safe-area-inset-bottom)" }}>
@@ -1268,6 +1267,7 @@ export default function App() {
         {modal && <TaskModal task={modal.task} onSave={handleSave} onDelete={handleDelete} onClose={() => setModal(null)} />}
         {calPicker && <CalendarMapModal googleCals={calPicker.list} onSave={handleCalMapSave} onSkip={handleCalMapSkip} />}
         <Toast msg={toast} />
+        <div className="ios-bg-patch" />
         <TabBar view={view} setView={setView}
           onAdd={() => setModal({ task: view === "inbox" ? { date: "" } : {} })} />
       </div>
