@@ -45,7 +45,7 @@ const EC = [
   { v:  2, icon: "▸▸", l: "Anstrengend",       c: "#EA580C" },
   { v:  3, icon: "▸▸▸",l: "Sehr anstrengend",  c: "#DC2626" },
 ]
-const APP_VERSION = "1.2"
+const APP_VERSION = "1.3"
 const DURS = [2, 15, 30, 45, 60, 90, 120, 150, 180, 240]
 const DL   = { 2:"2min", 15:"15min", 30:"30min", 45:"45min", 60:"1h", 90:"1.5h", 120:"2h", 150:"2.5h", 180:"3h", 240:"4h" }
 const WDAY = ["So","Mo","Di","Mi","Do","Fr","Sa"]
@@ -99,20 +99,31 @@ function waitForGoogle(timeout = 5000) {
   })
 }
 
-// Wraps any Calendar API call: requests a token first if needed.
-// Must be triggered from a user gesture (button click) on the first call.
+// Acquire an OAuth token. The ONLY place that opens the GIS flow.
+// prompt: "" = silent (reuse existing session), "consent" = force dialog.
+// Silent calls are timeout-guarded so a non-firing callback can't hang.
+function acquireToken(prompt) {
+  return waitForGoogle().then(() => {
+    const p = new Promise((resolve, reject) => {
+      const client = getTokenClient()
+      client.callback = (resp) => {
+        if (resp.error) { reject(new Error(resp.error)); return }
+        _accessToken = resp.access_token
+        resolve(resp)
+      }
+      client.requestAccessToken({ prompt })
+    })
+    // Don't timeout the consent dialog — the user needs time to interact.
+    return prompt === "consent" ? p : withTimeout(p, 10000, "auth_timeout")
+  })
+}
+
+// Pure API wrapper: uses the already-acquired token, never opens a popup.
+// Throws "not_authed" if there is no token yet (caller should log in first).
 async function withAuth(fn) {
   await waitForGoogle()
-  return new Promise((resolve, reject) => {
-    if (_accessToken) { fn().then(resolve).catch(reject); return }
-    const client = getTokenClient()
-    client.callback = (resp) => {
-      if (resp.error) { reject(new Error(resp.error)); return }
-      _accessToken = resp.access_token
-      fn().then(resolve).catch(reject)
-    }
-    client.requestAccessToken({ prompt: "" })
-  })
+  if (!_accessToken) throw new Error("not_authed")
+  return fn()
 }
 
 // ─── Google Calendar REST API ─────────────────────────────────
@@ -877,12 +888,18 @@ export default function App() {
     setTasks(t); setBudget(b)
     if (Object.keys(c).length > 0) {
       setCals(c)
-      showToast("Kalender wird synchronisiert …", 3000)
-      // Auto-sync on startup: delay so GIS script is loaded and doSyncRef is set
-      // driveLoad runs inside doSync after auth succeeds
-      setTimeout(() => doSyncRef.current?.(), 1500)
+      // Try a SILENT token (reuses an existing Google session, no popup).
+      // On success authed flips → the [authed,cals] effect runs doSync.
+      // On failure the "Anmelden" banner stays visible.
+      acquireToken("")
+        .then(resp => {
+          const hasDrive = window.google.accounts.oauth2.hasGrantedAllScopes(resp, DRIVE_SCOPE)
+          if (hasDrive) localStorage.setItem("poco-drive-ok", "1")
+          setAuthed(true)
+        })
+        .catch(() => showToast("Zum Synchronisieren anmelden", 4000))
     } else {
-      showToast("↻ drücken um Google Kalender zu verbinden", 5000)
+      showToast("Anmelden um Google Kalender zu verbinden", 5000)
     }
   }, [])
 
@@ -913,17 +930,16 @@ export default function App() {
   // Consent-Screen, damit der drive.appdata-Scope sicher erteilt wird.
   const doLogin = () => {
     if (!window.google?.accounts?.oauth2) { showToast("App lädt noch, kurz warten …", 3000); return }
-    const client = getTokenClient()
     const driveGranted = localStorage.getItem("poco-drive-ok") === "1"
+    const client = getTokenClient()
     client.callback = (resp) => {
       if (resp.error) { showToast("Anmeldung fehlgeschlagen: " + resp.error, 5000); return }
       _accessToken = resp.access_token
       const hasDrive = window.google.accounts.oauth2.hasGrantedAllScopes(resp, DRIVE_SCOPE)
       if (hasDrive) localStorage.setItem("poco-drive-ok", "1")
       else localStorage.removeItem("poco-drive-ok")
-      setAuthed(true)
+      setAuthed(true) // triggers the [authed,cals] effect → doSync
       showToast(hasDrive ? "Angemeldet, synchronisiere …" : "Angemeldet (Drive nicht freigegeben)", 4000)
-      setTimeout(() => doSyncRef.current?.(), 300)
     }
     client.requestAccessToken({ prompt: driveGranted ? "" : "consent" })
   }
@@ -1034,8 +1050,12 @@ export default function App() {
       showToast(parts.length > 0 ? `${parts.join(", ")} ✓${driveMsg}` : `${current.length} Einträge · alles aktuell${driveMsg}`, driveOk ? 3000 : 8000)
     } catch (e) {
       console.error(e)
-      showToast(e.message || "Sync-Fehler", 8000)
-      if (e.message === "token_expired") setAuthed(false)
+      if (e.message === "token_expired" || e.message === "not_authed" || e.message === "auth_timeout") {
+        setAuthed(false)
+        showToast("Bitte neu anmelden", 6000)
+      } else {
+        showToast(e.message || "Sync-Fehler", 8000)
+      }
     } finally {
       setSyncing(false)
     }
