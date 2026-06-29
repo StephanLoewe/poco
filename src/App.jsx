@@ -1182,7 +1182,7 @@ export default function App() {
         @keyframes spin { to { transform: rotate(360deg); } }
         .list-group > div:last-child { border-bottom: none; }
       `}</style>
-      <div style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", background: T.bg, color: T.text, height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden", paddingBottom: "calc(62px + env(safe-area-inset-bottom))" }}>
+      <div style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", background: T.bg, color: T.text, height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden", paddingBottom: "calc(100px + env(safe-area-inset-bottom))" }}>
         {/* Centered chrome: header, login banner, legend, energy bar */}
         <div style={{ maxWidth: isMobile ? "none" : 1400, width: "100%", margin: "0 auto", flexShrink: 0, display: "flex", flexDirection: "column" }}>
           <Header view={view} date={date} setDate={setDate} syncing={syncing} onSync={doSync} />
