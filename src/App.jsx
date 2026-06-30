@@ -496,8 +496,31 @@ function ListView({ tasks, date, onTaskClick, onAdd, onToggleDone }) {
   const today = dKey(new Date())
   const subStats = (id) => { const k = tasks.filter(x => x.parentId === id); return k.length ? { total: k.length, done: k.filter(x => x.status === "done").length } : null }
 
+  const overdue = tasks.filter(t => t.date && t.date < today && t.status === "open" && !t.parentId)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
+  const [overdueOpen, setOverdueOpen] = useState(true)
+
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px 32px" }}>
+      {overdue.length > 0 && (
+        <div style={{ marginBottom: 22 }}>
+          <button onClick={() => setOverdueOpen(v => !v)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, marginBottom: overdueOpen ? 8 : 0, background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
+            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "rgba(239,68,68,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <span style={{ fontSize: 14 }}>!</span>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#EF4444", textTransform: "uppercase", letterSpacing: "0.07em", lineHeight: 1 }}>Überfällig</div>
+              <div style={{ fontSize: 10, color: T.dim, marginTop: 2 }}>{overdue.length} offene Aufgabe{overdue.length !== 1 ? "n" : ""}</div>
+            </div>
+            <span style={{ fontSize: 11, color: T.dim, transform: overdueOpen ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.2s" }}>▾</span>
+          </button>
+          {overdueOpen && (
+            <div className="list-group" style={{ background: T.surface, borderRadius: 12, padding: "0 14px", border: `1px solid rgba(239,68,68,0.25)` }}>
+              {overdue.map(t => <SwipeRow key={t.id} task={t} subStats={subStats(t.id)} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />)}
+            </div>
+          )}
+        </div>
+      )}
       {days.map(d => {
         const dk   = dKey(d)
         const isT  = dk === today
