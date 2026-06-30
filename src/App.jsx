@@ -164,7 +164,7 @@ function TaskModal({ task, onSave, onDelete, onClose }) {
           onTouchStart={onHandleTouchStart}
           onTouchMove={onHandleTouchMove}
           onTouchEnd={onHandleTouchEnd}
-          style={{ width: 36, height: 4, background: T.dim, borderRadius: 2, margin: "0 auto 18px", cursor: "grab", touchAction: "none", padding: "12px 80px", boxSizing: "content-box", marginLeft: "auto", marginRight: "auto", display: "flex", alignItems: "center", justifyContent: "center" }}
+          style={{ width: "100%", padding: "12px 0", cursor: "grab", touchAction: "none", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 6 }}
         >
           <div style={{ width: 36, height: 4, background: T.dim, borderRadius: 2 }} />
         </div>
