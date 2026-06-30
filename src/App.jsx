@@ -739,48 +739,12 @@ function InboxView({ tasks, onTaskClick, onAdd, onToggleDone }) {
   )
 }
 
-// ─── EnergyBar ────────────────────────────────────────────────
-function EnergyBar({ tasks, date, budget, onBudgetChange }) {
-  const dk   = dKey(date)
-  const open = tasks.filter(t => t.date === dk && t.status === "open")
-  const net  = open.reduce((s, t) => s + (t.energy ?? 0), 0)
-  const pct  = budget > 0 ? Math.min(100, Math.max(0, (net / budget) * 100)) : 0
-  const col  = pct > 90 ? "#EF4444" : pct > 70 ? "#F97316" : pct > 50 ? "#EAB308" : "#059669"
-
-  return (
-    <div style={{ padding: "7px 16px 8px", background: T.surface, borderBottom: `1px solid ${T.border}` }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 11, color: T.muted, flexShrink: 0 }}>⚡ Budget</span>
-        <div style={{ flex: 1, height: 4, background: T.subtle, borderRadius: 2, overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${pct}%`, background: col, borderRadius: 2, transition: "width 0.4s ease" }} />
-        </div>
-        <span style={{ fontSize: 11, color: col, flexShrink: 0, minWidth: 20, textAlign: "right", fontWeight: 600 }}>{net}</span>
-        <span style={{ fontSize: 11, color: T.dim }}>/</span>
-        <input type="number" value={budget} min={1} max={30} onChange={e => onBudgetChange(Math.max(1, +e.target.value))}
-          style={{ width: 28, background: "transparent", border: "none", color: T.muted, fontSize: 11, textAlign: "center", outline: "none", fontFamily: "inherit", padding: 0 }}
-        />
-      </div>
-    </div>
-  )
-}
-
-// ─── LabelLegend ─────────────────────────────────────────────
-function LabelLegend() {
-  return (
-    <div style={{ display: "flex", gap: 12, padding: "5px 16px 6px", background: T.surface, borderBottom: `1px solid ${T.border}` }}>
-      {LABELS.map(l => (
-        <div key={l} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-          <div style={{ width: 7, height: 7, borderRadius: "50%", background: LC[l].c }} />
-          <span style={{ fontSize: 10, color: T.muted, fontWeight: 500 }}>{l}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 // ─── Header ───────────────────────────────────────────────────
-function Header({ view, date, setDate, syncing, onSync }) {
+function Header({ view, date, setDate, syncing, onSync, tasks }) {
   const isToday = dKey(date) === dKey(new Date())
+  const todayKey = dKey(new Date())
+  const todayNet = (tasks || []).filter(t => t.date === todayKey && t.status === "open").reduce((s, t) => s + (t.energy ?? 0), 0)
+  const fireCol  = todayNet <= 0 ? "#059669" : todayNet <= 2 ? "#EAB308" : todayNet <= 4 ? "#F97316" : "#EF4444"
 
   const nav = (dir) => {
     const dt = new Date(date)
@@ -811,6 +775,11 @@ function Header({ view, date, setDate, syncing, onSync }) {
           )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {view !== "inbox" && (
+            <span style={{ fontSize: 13, color: fireCol, fontWeight: 600, display: "flex", alignItems: "center", gap: 2 }}>
+              🔥<span style={{ fontSize: 12 }}>{todayNet > 0 ? `+${todayNet}` : todayNet}</span>
+            </span>
+          )}
           <span style={{ fontSize: 10, color: T.dim }}>v{APP_VERSION}</span>
           <button onClick={onSync} disabled={syncing} title="Sync"
             style={{ width: 34, height: 34, borderRadius: 10, border: `1px solid ${T.border}`, background: T.surface, color: syncing ? "#2563EB" : T.muted, cursor: syncing ? "default" : "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", animation: syncing ? "spin 1s linear infinite" : "none" }}>
@@ -1217,7 +1186,7 @@ export default function App() {
       <div style={{ fontFamily: "system-ui, sans-serif", background: T.bg, color: T.text, height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden", paddingBottom: "env(safe-area-inset-bottom)" }}>
         {/* Centered chrome: header, login banner, legend, energy bar */}
         <div style={{ maxWidth: isMobile ? "none" : 1400, width: "100%", margin: "0 auto", flexShrink: 0, display: "flex", flexDirection: "column" }}>
-          <Header view={view} date={date} setDate={setDate} syncing={syncing} onSync={doSync} />
+          <Header view={view} date={date} setDate={setDate} syncing={syncing} onSync={doSync} tasks={tasks} />
           {!authed && (
             <button onClick={doLogin} style={{ margin: "8px 16px 0", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(37,99,235,0.25)", background: "rgba(37,99,235,0.06)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: "#2563EB", flexShrink: 0 }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
@@ -1234,8 +1203,6 @@ export default function App() {
               🔑 Sync-Passwort eingeben
             </button>
           )}
-          {view !== "inbox" && <LabelLegend />}
-          {view !== "inbox" && <EnergyBar tasks={tasks} date={date} budget={budget} onBudgetChange={handleBudget} />}
         </div>
 
         {/* Content area — list/inbox centered, calendar full width */}
