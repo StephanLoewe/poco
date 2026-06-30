@@ -259,7 +259,7 @@ function TaskBlock({ task, onClick }) {
       boxShadow: done ? "none" : "0 2px 8px rgba(0,0,0,0.15)",
     }}>
       <span style={{
-        fontSize: tiny ? 9 : 11, fontWeight: 700, color: "white",
+        fontSize: tiny ? 9 : 11, fontWeight: 500, color: "white",
         overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
         width: "100%", textDecoration: done ? "line-through" : "none",
         lineHeight: 1.3,
