@@ -101,7 +101,7 @@ function CalendarMapModal({ googleCals, onSave, onSkip }) {
 }
 
 // ─── TaskModal ────────────────────────────────────────────────
-function TaskModal({ task, onSave, onDelete, onClose }) {
+function TaskModal({ task, onSave, onDelete, onClose, allTasks = [], onAddSubtask, onToggleSubtask, onOpenSubtask }) {
   const isNew = !task.id
   const [f, setF] = useState({
     id:       task.id       || uid(),
@@ -114,8 +114,20 @@ function TaskModal({ task, onSave, onDelete, onClose }) {
     energy:   task.energy   ?? 0,
     status:   task.status   || "open",
     gcalId:   task.gcalId   || null,
+    parentId: task.parentId || null,
   })
   const set = (k, v) => setF(p => ({ ...p, [k]: v }))
+
+  // ─── Subtask / project wiring ───
+  const children   = allTasks.filter(t => t.parentId === f.id)
+  const isSubtask  = !!f.parentId
+  const isProject  = children.length > 0
+  const doneKids   = children.filter(t => t.status === "done").length
+  const parentTask = f.parentId ? allTasks.find(t => t.id === f.parentId) : null
+  const candidates = allTasks.filter(t => !t.parentId && t.id !== f.id)
+  const [subInput, setSubInput]       = useState("")
+  const [showProjPick, setShowProjPick] = useState(false)
+  const addSub = () => { const t = subInput.trim(); if (!t) return; onAddSubtask?.(f.id, t); setSubInput("") }
 
   const [dragY, setDragY] = useState(0)
   const dragStart = useRef(null)
@@ -220,6 +232,65 @@ function TaskModal({ task, onSave, onDelete, onClose }) {
               {[{ v: "open", l: "Offen" }, { v: "done", l: "Erledigt ✓" }].map(s => (
                 <button key={s.v} onClick={() => set("status", s.v)} style={{ ...chip(f.status === s.v, "#2563EB", "rgba(37,99,235,0.09)"), flex: 1, textAlign: "center" }}>{s.l}</button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Project assignment — hidden for tasks that are themselves projects (1 level only) */}
+        {!isProject && (
+          <div style={{ marginBottom: 16 }}>
+            <span style={lbl}>Projekt</span>
+            <button onClick={() => setShowProjPick(v => !v)} style={{ ...inp, display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", textAlign: "left" }}>
+              <span style={{ color: parentTask ? T.text : T.muted }}>{parentTask ? parentTask.title : "Kein Projekt"}</span>
+              <span style={{ color: T.dim, fontSize: 11 }}>{showProjPick ? "▲" : "▼"}</span>
+            </button>
+            {showProjPick && (
+              <div style={{ marginTop: 6, border: `1px solid ${T.border}`, borderRadius: 10, overflow: "hidden", maxHeight: 200, overflowY: "auto" }}>
+                <div onClick={() => { set("parentId", null); setShowProjPick(false) }}
+                  style={{ padding: "10px 14px", fontSize: 13, color: T.muted, cursor: "pointer", borderBottom: `1px solid ${T.border}` }}>
+                  Kein Projekt
+                </div>
+                {candidates.length === 0 && (
+                  <div style={{ padding: "10px 14px", fontSize: 12, color: T.dim }}>Noch keine anderen Aufgaben</div>
+                )}
+                {candidates.map(c => {
+                  const cl = LC[c.label] || LC.Arbeit
+                  return (
+                    <div key={c.id} onClick={() => { set("parentId", c.id); setShowProjPick(false) }}
+                      style={{ padding: "10px 14px", fontSize: 13, color: f.parentId === c.id ? cl.pastelText : T.text, cursor: "pointer", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 8, fontWeight: f.parentId === c.id ? 600 : 400 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: cl.solid, flexShrink: 0 }} />
+                      <span style={{ overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{c.title}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Subtasks — existing top-level tasks only (a subtask can't have its own steps) */}
+        {!isNew && !isSubtask && (
+          <div style={{ marginBottom: 16 }}>
+            <span style={lbl}>Teilschritte{isProject ? ` (${doneKids}/${children.length})` : ""}</span>
+            {children.map(c => {
+              const cdone = c.status === "done"
+              const cl = LC[c.label] || LC.Arbeit
+              return (
+                <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${T.border}` }}>
+                  <div onClick={() => onToggleSubtask?.(c.id)} style={{ width: 18, height: 18, borderRadius: 1000, flexShrink: 0, cursor: "pointer", border: `1.5px solid ${cdone ? cl.pastelText : T.dim}`, background: cdone ? cl.pastelText : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {cdone && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </div>
+                  <div onClick={() => onOpenSubtask?.(c)} style={{ flex: 1, minWidth: 0, cursor: "pointer" }}>
+                    <div style={{ fontSize: 13, color: cdone ? T.dim : T.text, textDecoration: cdone ? "line-through" : "none", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{c.title}</div>
+                    {c.date && <div style={{ fontSize: 10, color: cl.pastelText, marginTop: 1 }}>📅 {c.time}</div>}
+                  </div>
+                </div>
+              )
+            })}
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <input value={subInput} onChange={e => setSubInput(e.target.value)} onKeyDown={e => e.key === "Enter" && addSub()}
+                placeholder="Teilschritt hinzufügen …" style={{ ...inp, fontSize: 13 }} />
+              <button onClick={addSub} style={{ width: 40, flexShrink: 0, borderRadius: 10, border: "none", background: subInput.trim() ? "#2563EB" : T.subtle, color: subInput.trim() ? "white" : T.dim, cursor: subInput.trim() ? "pointer" : "default", fontSize: 20 }}>+</button>
             </div>
           </div>
         )}
@@ -423,6 +494,7 @@ function ListView({ tasks, date, onTaskClick, onAdd, onToggleDone }) {
   const mon   = getMon(date)
   const days  = Array.from({ length: 7 }, (_, i) => dPlus(mon, i))
   const today = dKey(new Date())
+  const subStats = (id) => { const k = tasks.filter(x => x.parentId === id); return k.length ? { total: k.length, done: k.filter(x => x.status === "done").length } : null }
 
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px 32px" }}>
@@ -462,8 +534,8 @@ function ListView({ tasks, date, onTaskClick, onAdd, onToggleDone }) {
 
             {(open.length > 0 || done.length > 0) && (
               <div className="list-group" style={{ background: T.surface, borderRadius: 12, padding: "0 14px", border: `1px solid ${T.border}` }}>
-                {open.map(t => <SwipeRow key={t.id} task={t} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />)}
-                {done.map(t => <SwipeRow key={t.id} task={t} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />)}
+                {open.map(t => <SwipeRow key={t.id} task={t} subStats={subStats(t.id)} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />)}
+                {done.map(t => <SwipeRow key={t.id} task={t} subStats={subStats(t.id)} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />)}
               </div>
             )}
           </div>
@@ -474,7 +546,7 @@ function ListView({ tasks, date, onTaskClick, onAdd, onToggleDone }) {
 }
 
 // ─── SwipeRow ─────────────────────────────────────────────────
-function SwipeRow({ task, onClick, onToggleDone }) {
+function SwipeRow({ task, subStats, onClick, onToggleDone }) {
   const ref      = useRef()
   const startX   = useRef(null)
   const curX     = useRef(0)
@@ -530,13 +602,13 @@ function SwipeRow({ task, onClick, onToggleDone }) {
         onTouchEnd={onTouchEnd}
         style={{ transform: `translateX(${offset}px)`, transition: offset === 0 ? "transform 0.2s" : "none" }}
       >
-        <ListRow task={task} onClick={onClick} onToggleDone={onToggleDone} />
+        <ListRow task={task} subStats={subStats} onClick={onClick} onToggleDone={onToggleDone} />
       </div>
     </div>
   )
 }
 
-function ListRow({ task, onClick, onToggleDone }) {
+function ListRow({ task, subStats, onClick, onToggleDone }) {
   const lc   = LC[task.label] || LC.Arbeit
   const pr   = PC[task.priority]
   const done = task.status === "done"
@@ -595,6 +667,14 @@ function ListRow({ task, onClick, onToggleDone }) {
         </div>
       </div>
 
+      {/* Project badge — shown when this task has subtasks */}
+      {subStats && (
+        <span style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 10, fontWeight: 600, color: lc.pastelText, background: lc.pastel, border: `1px solid ${lc.pastelBrd}`, borderRadius: 6, padding: "2px 6px", flexShrink: 0 }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          {subStats.done}/{subStats.total}
+        </span>
+      )}
+
       {/* Priority badge */}
       <span style={{ fontSize: 10, fontWeight: 700, color: T.dim, flexShrink: 0 }}>
         {task.priority}
@@ -606,9 +686,10 @@ function ListRow({ task, onClick, onToggleDone }) {
 // ─── InboxView ────────────────────────────────────────────────
 function InboxView({ tasks, onTaskClick, onAdd, onToggleDone }) {
   const [input, setInput] = useState("")
-  const inboxTasks = tasks.filter(t => !t.date)
+  const inboxTasks = tasks.filter(t => !t.date && !t.parentId)
   const open = inboxTasks.filter(t => t.status !== "done")
   const done = inboxTasks.filter(t => t.status === "done")
+  const subStats = (id) => { const k = tasks.filter(x => x.parentId === id); return k.length ? { total: k.length, done: k.filter(x => x.status === "done").length } : null }
 
   const handleAdd = () => {
     const title = input.trim()
@@ -643,13 +724,13 @@ function InboxView({ tasks, onTaskClick, onAdd, onToggleDone }) {
         {(open.length > 0 || done.length > 0) && (
           <div className="list-group" style={{ background: T.surface, borderRadius: 12, padding: "0 14px", border: `1px solid ${T.border}` }}>
             {open.map(t => (
-              <SwipeRow key={t.id} task={t} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />
+              <SwipeRow key={t.id} task={t} subStats={subStats(t.id)} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />
             ))}
             {done.length > 0 && open.length > 0 && (
               <div style={{ fontSize: 10, color: T.dim, textTransform: "uppercase", letterSpacing: "0.08em", padding: "10px 0 4px" }}>Erledigt</div>
             )}
             {done.map(t => (
-              <SwipeRow key={t.id} task={t} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />
+              <SwipeRow key={t.id} task={t} subStats={subStats(t.id)} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />
             ))}
           </div>
         )}
@@ -1088,7 +1169,10 @@ export default function App() {
     if (t?.gcalId && cals[t.label] && authed) {
       try { await gDel(cals[t.label], t.gcalId) } catch {}
     }
-    const updated = tasks.filter(x => x.id !== id)
+    // Detach any subtasks instead of orphaning them — dateless ones return to the inbox.
+    const updated = tasks
+      .filter(x => x.id !== id)
+      .map(x => x.parentId === id ? { ...x, parentId: null } : x)
     setTasks(updated); persist(updated)
     setModal(null); showToast("Gelöscht")
   }
@@ -1097,6 +1181,13 @@ export default function App() {
 
   const handleToggleDone = (id) => {
     const updated = tasks.map(t => t.id === id ? { ...t, status: t.status === "done" ? "open" : "done" } : t)
+    setTasks(updated); persist(updated)
+  }
+
+  const handleAddSubtask = (parentId, title) => {
+    const parent = tasks.find(t => t.id === parentId)
+    const t = { id: uid(), title, date: "", time: nowT(), duration: 30, label: parent?.label || "Arbeit", priority: "P3", energy: 0, status: "open", parentId }
+    const updated = [...tasks, t]
     setTasks(updated); persist(updated)
   }
 
@@ -1182,7 +1273,8 @@ export default function App() {
           </div>
         )}
 
-        {modal && <TaskModal task={modal.task} onSave={handleSave} onDelete={handleDelete} onClose={() => setModal(null)} />}
+        {modal && <TaskModal task={modal.task} allTasks={tasks} onSave={handleSave} onDelete={handleDelete} onClose={() => setModal(null)}
+          onAddSubtask={handleAddSubtask} onToggleSubtask={handleToggleDone} onOpenSubtask={c => setModal({ task: c })} />}
         {calPicker && <CalendarMapModal googleCals={calPicker.list} onSave={handleCalMapSave} onSkip={handleCalMapSkip} />}
         <Toast msg={toast} />
 
