@@ -399,9 +399,9 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
           {days.map(d => {
             const dk = dKey(d); const isT = dk === today
             return (
-              <div key={dk} style={{ flex: numDays === 1 ? 1 : undefined, width: numDays > 1 ? dayWidth : undefined, flexShrink: 0, textAlign: "center", padding: "8px 4px", borderLeft: `1px solid ${T.border}` }}>
-                <div style={{ fontSize: 9, color: T.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>{WDAY[d.getDay()]}</div>
-                <div style={{ fontSize: 14, fontWeight: 700, width: 26, height: 26, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "3px auto 0", background: isT ? "#2563EB" : "transparent", color: isT ? "white" : T.text }}>
+              <div key={dk} style={{ flex: numDays === 1 ? 1 : undefined, width: numDays > 1 ? dayWidth : undefined, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "7px 4px", borderLeft: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: 9, color: isT ? "#2563EB" : T.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: isT ? 600 : 400 }}>{WDAY[d.getDay()]}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: isT ? "#2563EB" : "transparent", color: isT ? "white" : T.text, flexShrink: 0 }}>
                   {d.getDate()}
                 </div>
               </div>
