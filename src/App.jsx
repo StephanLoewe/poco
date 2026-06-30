@@ -117,6 +117,32 @@ function TaskModal({ task, onSave, onDelete, onClose }) {
   })
   const set = (k, v) => setF(p => ({ ...p, [k]: v }))
 
+  const [dragY, setDragY] = useState(0)
+  const dragStart = useRef(null)
+  const isDragging = useRef(false)
+  const DISMISS_THRESHOLD = 80
+
+  const onHandleTouchStart = (e) => {
+    dragStart.current = e.touches[0].clientY
+    isDragging.current = true
+  }
+  const onHandleTouchMove = (e) => {
+    if (!isDragging.current) return
+    const dy = e.touches[0].clientY - dragStart.current
+    if (dy > 0) {
+      e.preventDefault()
+      setDragY(dy)
+    }
+  }
+  const onHandleTouchEnd = () => {
+    isDragging.current = false
+    if (dragY > DISMISS_THRESHOLD) {
+      onClose()
+    } else {
+      setDragY(0)
+    }
+  }
+
   const inp = {
     fontFamily: "inherit", background: T.subtle, color: T.text,
     border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 14px",
@@ -133,8 +159,15 @@ function TaskModal({ task, onSave, onDelete, onClose }) {
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,25,55,0.35)", backdropFilter: "blur(10px)", zIndex: 999, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: T.surface, borderRadius: "22px 22px 0 0", width: "100%", maxWidth: 430, padding: "20px 20px 44px", maxHeight: "92vh", overflowY: "auto", boxShadow: "0 -8px 40px rgba(0,0,0,0.12)" }}>
-        <div style={{ width: 36, height: 4, background: T.dim, borderRadius: 2, margin: "0 auto 18px" }} />
+      <div onClick={e => e.stopPropagation()} style={{ background: T.surface, borderRadius: "22px 22px 0 0", width: "100%", maxWidth: 430, padding: "20px 20px 44px", maxHeight: "92vh", overflowY: "auto", boxShadow: "0 -8px 40px rgba(0,0,0,0.12)", transform: `translateY(${dragY}px)`, transition: isDragging.current ? "none" : "transform 0.25s cubic-bezier(0.32,0.72,0,1)" }}>
+        <div
+          onTouchStart={onHandleTouchStart}
+          onTouchMove={onHandleTouchMove}
+          onTouchEnd={onHandleTouchEnd}
+          style={{ width: 36, height: 4, background: T.dim, borderRadius: 2, margin: "0 auto 18px", cursor: "grab", touchAction: "none", padding: "12px 80px", boxSizing: "content-box", marginLeft: "auto", marginRight: "auto", display: "flex", alignItems: "center", justifyContent: "center" }}
+        >
+          <div style={{ width: 36, height: 4, background: T.dim, borderRadius: 2 }} />
+        </div>
 
         <input value={f.title} onChange={e => set("title", e.target.value)}
           placeholder="Was ist zu tun?" autoFocus
