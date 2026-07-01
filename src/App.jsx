@@ -309,26 +309,104 @@ function TaskModal({ task, onSave, onDelete, onClose, allTasks = [], onAddSubtas
 }
 
 // ─── TaskBlock (Timeline) ─────────────────────────────────────
-function TaskBlock({ task, onClick }) {
+function TaskBlock({ task, onClick, onReschedule }) {
   const lc   = LC[task.label] || LC.Arbeit
-  const top  = tPx(task.time)
-  const ht   = dPx(task.duration)
-  const tiny = ht < 34
   const done = task.status === "done"
 
+  const [mode, setMode]   = useState(null)   // null | "move" | "resize"
+  const [delta, setDelta] = useState(0)      // px dragged (1px = 1min, HOUR_H = 60)
+  const startY  = useRef(0)
+  const timer   = useRef(null)
+  const didDrag = useRef(false)
+  const active  = useRef(false)
+  const pid     = useRef(null)
+
+  const baseMin = tPx(task.time)             // minutes from midnight (== px)
+  const durMin  = task.duration
+  const snap    = (v) => Math.round(v / 15) * 15
+
+  let curMin = baseMin, curDur = durMin
+  if (mode === "move")   curMin = Math.max(0, Math.min(1440 - durMin, snap(baseMin + delta)))
+  if (mode === "resize") curDur = Math.max(15, Math.min(1440 - baseMin, snap(durMin + delta)))
+
+  const top     = curMin
+  const ht      = dPx(curDur)
+  const tiny    = ht < 34
+  const curTime = `${pad(Math.floor(curMin / 60) % 24)}:${pad(curMin % 60)}`
+  const clearTimer = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null } }
+
+  // ── Move: long-press to activate ──
+  const onPointerDown = (e) => {
+    if (mode) return
+    const node = e.currentTarget
+    pid.current = e.pointerId
+    startY.current = e.clientY
+    didDrag.current = false
+    clearTimer()
+    timer.current = setTimeout(() => {
+      active.current = true
+      setMode("move")
+      try { node.setPointerCapture(pid.current) } catch {}
+      if (navigator.vibrate) navigator.vibrate(12)
+    }, 350)
+  }
+  const onPointerMove = (e) => {
+    if (!active.current) {
+      if (Math.abs(e.clientY - startY.current) > 10) clearTimer()  // finger moved → user is scrolling
+      return
+    }
+    e.preventDefault()
+    didDrag.current = true
+    setDelta(e.clientY - startY.current)
+  }
+  const endDrag = () => {
+    clearTimer()
+    if (!active.current) return
+    active.current = false
+    if (mode === "move"   && curMin !== baseMin) onReschedule?.(task.id, curTime, task.duration)
+    if (mode === "resize" && curDur !== durMin)  onReschedule?.(task.id, task.time, curDur)
+    setMode(null); setDelta(0)
+  }
+
+  // ── Resize handle: activates immediately ──
+  const onResizeDown = (e) => {
+    e.stopPropagation()
+    startY.current = e.clientY
+    didDrag.current = true
+    active.current = true
+    setMode("resize")
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch {}
+  }
+
+  const handleClick = (e) => {
+    e.stopPropagation()
+    if (didDrag.current) { didDrag.current = false; return }
+    onClick?.(e)
+  }
+
   return (
-    <div onClick={onClick} style={{
-      position: "absolute", top, left: 3, right: 3, height: ht, minHeight: 24,
-      background: lc.solid,
-      borderRadius: 7,
-      borderTop: `2px solid rgba(255,255,255,0.25)`,
-      padding: tiny ? "2px 6px" : "5px 7px",
-      cursor: "pointer", overflow: "hidden", boxSizing: "border-box",
-      opacity: done ? 0.4 : 1, transition: "opacity 0.15s",
-      display: "flex", flexDirection: "column",
-      alignItems: "flex-start", justifyContent: tiny ? "center" : "flex-start",
-      boxShadow: done ? "none" : "0 2px 8px rgba(0,0,0,0.15)",
-    }}>
+    <div
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      onClick={handleClick}
+      style={{
+        position: "absolute", top, left: 3, right: 3, height: ht, minHeight: 24,
+        background: lc.solid,
+        borderRadius: 7,
+        borderTop: `2px solid rgba(255,255,255,0.25)`,
+        padding: tiny ? "2px 6px" : "5px 7px",
+        cursor: "pointer", overflow: "hidden", boxSizing: "border-box",
+        opacity: done ? 0.4 : 1,
+        touchAction: mode ? "none" : "auto",
+        transition: mode ? "none" : "opacity 0.15s, box-shadow 0.15s",
+        display: "flex", flexDirection: "column",
+        alignItems: "flex-start", justifyContent: tiny ? "center" : "flex-start",
+        boxShadow: mode ? "0 10px 28px rgba(0,0,0,0.4)" : (done ? "none" : "0 2px 8px rgba(0,0,0,0.15)"),
+        zIndex: mode ? 20 : 1,
+        transform: mode === "move" ? "scale(1.03)" : "none",
+      }}>
       <span style={{
         fontSize: tiny ? 9 : 11, fontWeight: 500, color: "white",
         overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
@@ -337,11 +415,15 @@ function TaskBlock({ task, onClick }) {
       }}>
         {task.title}
       </span>
-      {!tiny && ht >= 44 && (
-        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.8)", marginTop: 1, lineHeight: 1.2 }}>
-          {task.time}
+      {(mode || (!tiny && ht >= 44)) && (
+        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.85)", marginTop: 1, lineHeight: 1.2, fontWeight: mode ? 700 : 400 }}>
+          {mode === "resize" ? `${curTime} · ${DL[curDur] || curDur + "min"}` : (mode === "move" ? curTime : task.time)}
         </span>
       )}
+      {/* Resize handle */}
+      <div onPointerDown={onResizeDown} style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 14, cursor: "ns-resize", touchAction: "none", display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 2 }}>
+        <div style={{ width: 22, height: 3, borderRadius: 2, background: "rgba(255,255,255,0.55)" }} />
+      </div>
     </div>
   )
 }
@@ -371,7 +453,7 @@ function HourGrid() {
 }
 
 // ─── MultiDayView (DayView + WeekView unified) ────────────────
-function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick }) {
+function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick, onReschedule }) {
   const ref        = useRef()
   const headerRef  = useRef()
   const allDayRef  = useRef()
@@ -463,7 +545,7 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
                 }}>
                 <HourGrid />
                 {isT && <NowLine />}
-                {timedTasks.map(t => <TaskBlock key={t.id} task={t} onClick={e => { e.stopPropagation(); onTaskClick(t) }} />)}
+                {timedTasks.map(t => <TaskBlock key={t.id} task={t} onReschedule={onReschedule} onClick={e => { e.stopPropagation(); onTaskClick(t) }} />)}
               </div>
             )
           })}
@@ -478,12 +560,12 @@ function DayView({ tasks, date, onTaskClick, onTimeClick }) {
 }
 
 // ─── WeekView ─────────────────────────────────────────────────
-function WeekView({ tasks, date, dayWidth, onTaskClick, onTimeClick }) {
+function WeekView({ tasks, date, dayWidth, onTaskClick, onTimeClick, onReschedule }) {
   const mon = getMon(date)
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflowX: dayWidth ? "hidden" : "auto", overflowY: "hidden" }}>
-        <MultiDayView tasks={tasks} date={mon} numDays={7} dayWidth={dayWidth || 110} onTaskClick={onTaskClick} onTimeClick={onTimeClick} />
+        <MultiDayView tasks={tasks} date={mon} numDays={7} dayWidth={dayWidth || 110} onTaskClick={onTaskClick} onTimeClick={onTimeClick} onReschedule={onReschedule} />
       </div>
     </div>
   )
@@ -1182,6 +1264,12 @@ export default function App() {
     setTasks(updated); persist(updated)
   }
 
+  const handleReschedule = (id, time, duration) => {
+    const t = tasks.find(x => x.id === id)
+    if (!t) return
+    handleSave({ ...t, time, duration })
+  }
+
   const handleAddSubtask = (parentId, title) => {
     const parent = tasks.find(t => t.id === parentId)
     const t = { id: uid(), title, date: "", time: nowT(), duration: 30, label: parent?.label || "Arbeit", priority: "P3", energy: 0, status: "open", parentId }
@@ -1250,12 +1338,12 @@ export default function App() {
         )}
         {view === "day" && (
           <MultiDayView tasks={tasks} date={date} numDays={dayViewDays} dayWidth={dayViewDays > 1 ? Math.floor((calW - COL_W) / dayViewDays) : undefined}
-            onTaskClick={t => setModal({ task: t })}
+            onTaskClick={t => setModal({ task: t })} onReschedule={handleReschedule}
             onTimeClick={(t, d) => setModal({ task: { time: t, date: d ?? dKey(date) } })} />
         )}
         {view === "week" && (
           <WeekView tasks={tasks} date={date} dayWidth={isMobile ? undefined : weekDayW}
-            onTaskClick={t => setModal({ task: t })}
+            onTaskClick={t => setModal({ task: t })} onReschedule={handleReschedule}
             onTimeClick={(t, d) => setModal({ task: { time: t, date: d } })} />
         )}
         {view === "list" && (
