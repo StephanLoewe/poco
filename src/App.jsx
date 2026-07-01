@@ -309,9 +309,13 @@ function TaskModal({ task, onSave, onDelete, onClose, allTasks = [], onAddSubtas
 }
 
 // ─── TaskBlock (Timeline) ─────────────────────────────────────
-function TaskBlock({ task, onClick, onReschedule, dayAtX, scrollRef }) {
+function TaskBlock({ task, onClick, onReschedule, dayAtX, scrollRef, lane }) {
   const lc   = LC[task.label] || LC.Arbeit
   const done = task.status === "done"
+  const cols = lane?.cols || 1
+  const col  = lane?.col  || 0
+  const laneLeft  = `calc(${(col / cols) * 100}% + 2px)`
+  const laneWidth = `calc(${(1 / cols) * 100}% - ${cols > 1 ? 3 : 4}px)`
 
   const [mode, setMode] = useState(null)     // null | "move" | "resize"
   const [ptr, setPtr]   = useState({ x: 0, y: 0 })  // live pointer viewport coords (move)
@@ -442,7 +446,7 @@ function TaskBlock({ task, onClick, onReschedule, dayAtX, scrollRef }) {
       onPointerCancel={endDrag}
       onClick={handleClick}
       style={{
-        position: "absolute", top, left: 3, right: 3, height: ht, minHeight: 24,
+        position: "absolute", top, left: laneLeft, width: laneWidth, height: ht, minHeight: 24,
         background: lc.solid,
         borderRadius: 7,
         borderTop: `2px solid rgba(255,255,255,0.25)`,
@@ -500,6 +504,35 @@ function HourGrid() {
       <div key={h} style={{ position: "absolute", top: h * HOUR_H, left: 0, right: 0, height: HOUR_H, borderTop: `1px solid ${h ? T.border : "transparent"}` }} />
     ))}
   </>
+}
+
+// Assign side-by-side lanes to overlapping events within one day.
+// Returns Map<taskId, { col, cols }> where col is the lane index and
+// cols the number of lanes in that event's overlap cluster.
+function layoutDay(dayTasks) {
+  const items = dayTasks
+    .map(t => ({ id: t.id, s: tPx(t.time), e: tPx(t.time) + t.duration }))
+    .sort((a, b) => a.s - b.s || a.e - b.e)
+  const res = new Map()
+  let cluster = [], clusterEnd = -1
+  const flush = () => {
+    const laneEnds = []           // last end-time per lane
+    cluster.forEach(it => {
+      let placed = -1
+      for (let i = 0; i < laneEnds.length; i++) { if (it.s >= laneEnds[i]) { laneEnds[i] = it.e; placed = i; break } }
+      if (placed === -1) { laneEnds.push(it.e); placed = laneEnds.length - 1 }
+      it.col = placed
+    })
+    cluster.forEach(it => res.set(it.id, { col: it.col, cols: laneEnds.length }))
+    cluster = []
+  }
+  items.forEach(it => {
+    if (cluster.length && it.s >= clusterEnd) { flush(); clusterEnd = -1 }
+    cluster.push(it)
+    clusterEnd = Math.max(clusterEnd, it.e)
+  })
+  flush()
+  return res
 }
 
 // ─── MultiDayView (DayView + WeekView unified) ────────────────
@@ -594,6 +627,7 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
           {days.map(d => {
             const dk = dKey(d); const isT = dk === today
             const timedTasks = tasks.filter(t => t.date === dk && !t.allDay)
+            const lanes = layoutDay(timedTasks)
             return (
               <div key={dk} ref={el => { colRefs.current[dk] = el }} style={{ flex: numDays === 1 ? 1 : undefined, width: numDays > 1 ? dayWidth : undefined, flexShrink: 0, position: "relative", background: T.surface, borderLeft: `1px solid ${T.border}` }}
                 onClick={e => {
@@ -606,7 +640,7 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
                 }}>
                 <HourGrid />
                 {isT && <NowLine />}
-                {timedTasks.map(t => <TaskBlock key={t.id} task={t} onReschedule={onReschedule} dayAtX={dayAtX} scrollRef={ref} onClick={e => { e.stopPropagation(); onTaskClick(t) }} />)}
+                {timedTasks.map(t => <TaskBlock key={t.id} task={t} lane={lanes.get(t.id)} onReschedule={onReschedule} dayAtX={dayAtX} scrollRef={ref} onClick={e => { e.stopPropagation(); onTaskClick(t) }} />)}
               </div>
             )
           })}
@@ -937,7 +971,7 @@ function Header({ view, date, setDate, syncing, onSync, tasks }) {
             <button onClick={() => nav(-1)} style={{ background: "transparent", border: "none", color: T.muted, cursor: "pointer", fontSize: 22, padding: "0 4px", lineHeight: 1, display: "flex", alignItems: "center" }}>‹</button>
           )}
           <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: (isToday && view !== "inbox" && view !== "list") ? "#2563EB" : T.text, letterSpacing: "-0.01em" }}>{title}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: T.text, letterSpacing: "-0.01em" }}>{title}</div>
             {!isToday && view !== "inbox" && view !== "list" && (
               <button onClick={() => setDate(new Date())} style={{ fontSize: 11, color: "#2563EB", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0, marginTop: 1 }}>Heute</button>
             )}
