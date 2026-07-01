@@ -107,7 +107,7 @@ function TaskModal({ task, onSave, onDelete, onClose, allTasks = [], onAddSubtas
     id:       task.id       || uid(),
     title:    task.title    || "",
     date:     task.date !== undefined ? task.date : dKey(new Date()),
-    time:     task.time     || nowT(),
+    time:     task.time !== undefined ? task.time : nowT(),
     duration: task.duration || 30,
     label:    task.label    || "Arbeit",
     priority: task.priority || "P3",
@@ -805,7 +805,7 @@ function InboxView({ tasks, onTaskClick, onAdd, onToggleDone }) {
   const handleAdd = () => {
     const title = input.trim()
     if (!title) return
-    onAdd({ title, date: "", time: nowT(), duration: 30, label: "Arbeit", priority: "P3", energy: 0, status: "open" })
+    onAdd({ title, date: "", time: "", duration: 30, label: "Arbeit", priority: "P3", energy: 0, status: "open" })
     setInput("")
   }
 
@@ -1226,7 +1226,7 @@ export default function App() {
     const existing = tasks.find(t => t.id === f.id)
     let gcalId = f.gcalId
     const calId = cals[f.label]
-    if (calId && authed && f.date) {
+    if (calId && authed && f.date && f.time) {
       const s = `${f.date}T${f.time}:00`
       const e = `${f.date}T${eAdd(f.time, f.duration)}:00`
       try {
@@ -1363,7 +1363,7 @@ export default function App() {
         <Toast msg={toast} />
 
         <TabBar view={view} setView={setView}
-          onAdd={() => setModal({ task: { date: "" } })} />
+          onAdd={() => setModal({ task: { date: "", time: "" } })} />
       </div>
     </>
   )
