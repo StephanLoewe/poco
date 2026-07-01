@@ -106,7 +106,7 @@ function TaskModal({ task, onSave, onDelete, onClose, allTasks = [], onAddSubtas
   const [f, setF] = useState({
     id:       task.id       || uid(),
     title:    task.title    || "",
-    date:     task.date     || dKey(new Date()),
+    date:     task.date !== undefined ? task.date : dKey(new Date()),
     time:     task.time     || nowT(),
     duration: task.duration || 30,
     label:    task.label    || "Arbeit",
@@ -1275,7 +1275,7 @@ export default function App() {
         <Toast msg={toast} />
 
         <TabBar view={view} setView={setView}
-          onAdd={() => setModal({ task: view === "inbox" ? { date: "" } : {} })} />
+          onAdd={() => setModal({ task: { date: "" } })} />
       </div>
     </>
   )
