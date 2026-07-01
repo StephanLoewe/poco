@@ -309,31 +309,59 @@ function TaskModal({ task, onSave, onDelete, onClose, allTasks = [], onAddSubtas
 }
 
 // ─── TaskBlock (Timeline) ─────────────────────────────────────
-function TaskBlock({ task, onClick, onReschedule }) {
+function TaskBlock({ task, onClick, onReschedule, dayAtX, scrollRef }) {
   const lc   = LC[task.label] || LC.Arbeit
   const done = task.status === "done"
 
-  const [mode, setMode]   = useState(null)   // null | "move" | "resize"
-  const [delta, setDelta] = useState(0)      // px dragged (1px = 1min, HOUR_H = 60)
-  const startY  = useRef(0)
-  const timer   = useRef(null)
-  const didDrag = useRef(false)
-  const active  = useRef(false)
-  const pid     = useRef(null)
+  const [mode, setMode] = useState(null)     // null | "move" | "resize"
+  const [ptr, setPtr]   = useState({ x: 0, y: 0 })  // live pointer viewport coords (move)
+  const [rDelta, setRDelta] = useState(0)    // px dragged (resize)
+  const [targetDk, setTargetDk]     = useState(null)
+  const [translateX, setTranslateX] = useState(0)
+  const timer    = useRef(null)
+  const didDrag  = useRef(false)
+  const active   = useRef(false)
+  const pid      = useRef(null)
+  const startY   = useRef(0)
+  const grabY    = useRef(0)     // finger offset within block (px)
+  const originL  = useRef(0)     // origin column left (viewport px)
+  const rStartY  = useRef(0)
+  const autoDir  = useRef(0)
+  const autoRAF  = useRef(null)
 
-  const baseMin = tPx(task.time)             // minutes from midnight (== px)
+  const baseMin = tPx(task.time)             // minutes from midnight (== px, HOUR_H = 60)
   const durMin  = task.duration
   const snap    = (v) => Math.round(v / 15) * 15
 
   let curMin = baseMin, curDur = durMin
-  if (mode === "move")   curMin = Math.max(0, Math.min(1440 - durMin, snap(baseMin + delta)))
-  if (mode === "resize") curDur = Math.max(15, Math.min(1440 - baseMin, snap(durMin + delta)))
+  if (mode === "move") {
+    const cont = scrollRef?.current
+    if (cont) {
+      const cr = cont.getBoundingClientRect()
+      const desiredTop = (ptr.y - grabY.current) - cr.top + cont.scrollTop
+      curMin = Math.max(0, Math.min(1440 - durMin, snap(desiredTop)))
+    }
+  }
+  if (mode === "resize") curDur = Math.max(15, Math.min(1440 - baseMin, snap(durMin + rDelta)))
 
   const top     = curMin
   const ht      = dPx(curDur)
   const tiny    = ht < 34
   const curTime = `${pad(Math.floor(curMin / 60) % 24)}:${pad(curMin % 60)}`
   const clearTimer = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null } }
+  const stopAuto   = () => { autoDir.current = 0; if (autoRAF.current) { cancelAnimationFrame(autoRAF.current); autoRAF.current = null } }
+
+  // Auto-scroll the timeline while dragging near its top/bottom edge
+  const startAuto = () => {
+    if (autoRAF.current) return
+    const loop = () => {
+      if (autoDir.current === 0) { autoRAF.current = null; return }
+      const cont = scrollRef?.current
+      if (cont) { cont.scrollTop = Math.max(0, cont.scrollTop + autoDir.current * 9); setPtr(p => ({ ...p })) }
+      autoRAF.current = requestAnimationFrame(loop)
+    }
+    autoRAF.current = requestAnimationFrame(loop)
+  }
 
   // ── Move: long-press to activate ──
   const onPointerDown = (e) => {
@@ -343,8 +371,16 @@ function TaskBlock({ task, onClick, onReschedule }) {
     startY.current = e.clientY
     didDrag.current = false
     clearTimer()
+    const cont = scrollRef?.current
+    const cr   = cont?.getBoundingClientRect()
+    const blockTopViewport = cr ? (cr.top - cont.scrollTop + baseMin) : e.clientY
+    grabY.current = e.clientY - blockTopViewport
+    const initX = e.clientX, initY = e.clientY
     timer.current = setTimeout(() => {
       active.current = true
+      originL.current = dayAtX?.(initX)?.left ?? node.getBoundingClientRect().left
+      setPtr({ x: initX, y: initY })
+      setTargetDk(task.date); setTranslateX(0)
       setMode("move")
       try { node.setPointerCapture(pid.current) } catch {}
       if (navigator.vibrate) navigator.vibrate(12)
@@ -357,21 +393,35 @@ function TaskBlock({ task, onClick, onReschedule }) {
     }
     e.preventDefault()
     didDrag.current = true
-    setDelta(e.clientY - startY.current)
+    if (mode === "resize") { setRDelta(e.clientY - rStartY.current); return }
+    setPtr({ x: e.clientX, y: e.clientY })
+    const tgt = dayAtX?.(e.clientX)
+    if (tgt) { setTargetDk(tgt.dk); setTranslateX(tgt.left - originL.current) }
+    const cont = scrollRef?.current
+    if (cont) {
+      const cr = cont.getBoundingClientRect()
+      autoDir.current = e.clientY < cr.top + 55 ? -1 : e.clientY > cr.bottom - 55 ? 1 : 0
+      autoDir.current !== 0 ? startAuto() : stopAuto()
+    }
   }
   const endDrag = () => {
-    clearTimer()
+    clearTimer(); stopAuto()
     if (!active.current) return
     active.current = false
-    if (mode === "move"   && curMin !== baseMin) onReschedule?.(task.id, curTime, task.duration)
-    if (mode === "resize" && curDur !== durMin)  onReschedule?.(task.id, task.time, curDur)
-    setMode(null); setDelta(0)
+    if (mode === "move") {
+      const newDate = targetDk || task.date
+      if (curMin !== baseMin || newDate !== task.date) onReschedule?.(task.id, curTime, task.duration, newDate)
+    } else if (mode === "resize" && curDur !== durMin) {
+      onReschedule?.(task.id, task.time, curDur, task.date)
+    }
+    setMode(null); setRDelta(0); setTranslateX(0); setTargetDk(null)
   }
 
   // ── Resize handle: activates immediately ──
   const onResizeDown = (e) => {
     e.stopPropagation()
-    startY.current = e.clientY
+    rStartY.current = e.clientY
+    setRDelta(0)
     didDrag.current = true
     active.current = true
     setMode("resize")
@@ -405,7 +455,7 @@ function TaskBlock({ task, onClick, onReschedule }) {
         alignItems: "flex-start", justifyContent: tiny ? "center" : "flex-start",
         boxShadow: mode ? "0 10px 28px rgba(0,0,0,0.4)" : (done ? "none" : "0 2px 8px rgba(0,0,0,0.15)"),
         zIndex: mode ? 20 : 1,
-        transform: mode === "move" ? "scale(1.03)" : "none",
+        transform: mode === "move" ? `translateX(${translateX}px) scale(1.03)` : "none",
       }}>
       <span style={{
         fontSize: tiny ? 9 : 11, fontWeight: 500, color: "white",
@@ -457,9 +507,20 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
   const ref        = useRef()
   const headerRef  = useRef()
   const allDayRef  = useRef()
+  const colRefs    = useRef({})
   const today = dKey(new Date())
   const days  = Array.from({ length: numDays }, (_, i) => dPlus(date, i))
   const hasAllDay = days.some(d => tasks.some(t => t.date === dKey(d) && t.allDay))
+
+  // Resolve which day column sits under a given viewport X (for cross-day drag)
+  const dayAtX = (clientX) => {
+    for (const dk in colRefs.current) {
+      const el = colRefs.current[dk]; if (!el) continue
+      const r = el.getBoundingClientRect()
+      if (clientX >= r.left && clientX < r.right) return { dk, left: r.left }
+    }
+    return null
+  }
 
   useEffect(() => {
     const isToday = days.some(d => dKey(d) === today)
@@ -534,7 +595,7 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
             const dk = dKey(d); const isT = dk === today
             const timedTasks = tasks.filter(t => t.date === dk && !t.allDay)
             return (
-              <div key={dk} style={{ flex: numDays === 1 ? 1 : undefined, width: numDays > 1 ? dayWidth : undefined, flexShrink: 0, position: "relative", background: T.surface, borderLeft: `1px solid ${T.border}` }}
+              <div key={dk} ref={el => { colRefs.current[dk] = el }} style={{ flex: numDays === 1 ? 1 : undefined, width: numDays > 1 ? dayWidth : undefined, flexShrink: 0, position: "relative", background: T.surface, borderLeft: `1px solid ${T.border}` }}
                 onClick={e => {
                   const r = e.currentTarget.getBoundingClientRect()
                   const y = e.clientY - r.top + (ref.current?.scrollTop || 0)
@@ -545,7 +606,7 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
                 }}>
                 <HourGrid />
                 {isT && <NowLine />}
-                {timedTasks.map(t => <TaskBlock key={t.id} task={t} onReschedule={onReschedule} onClick={e => { e.stopPropagation(); onTaskClick(t) }} />)}
+                {timedTasks.map(t => <TaskBlock key={t.id} task={t} onReschedule={onReschedule} dayAtX={dayAtX} scrollRef={ref} onClick={e => { e.stopPropagation(); onTaskClick(t) }} />)}
               </div>
             )
           })}
@@ -1264,10 +1325,10 @@ export default function App() {
     setTasks(updated); persist(updated)
   }
 
-  const handleReschedule = (id, time, duration) => {
+  const handleReschedule = (id, time, duration, date) => {
     const t = tasks.find(x => x.id === id)
     if (!t) return
-    handleSave({ ...t, time, duration })
+    handleSave({ ...t, time, duration, date: date ?? t.date })
   }
 
   const handleAddSubtask = (parentId, title) => {
