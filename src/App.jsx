@@ -632,13 +632,19 @@ function SwipeRow({ task, subStats, onClick, onToggleDone }) {
 }
 
 function ListRow({ task, subStats, onClick, onToggleDone }) {
-  const lc   = LC[task.label] || LC.Arbeit
-  const pr   = PC[task.priority]
-  const done = task.status === "done"
+  const lc      = LC[task.label] || LC.Arbeit
+  const pr      = PC[task.priority]
+  const done    = task.status === "done"
+  const today   = dKey(new Date())
+  const overdue = task.date && task.date < today
   const endTime = task.time ? eAdd(task.time, task.duration) : null
 
+  const dateLabel = overdue
+    ? new Date(task.date + "T12:00:00").toLocaleDateString("de-DE", { day: "numeric", month: "short" })
+    : null
+
   const meta = [
-    task.time && endTime && `${task.time} · ${endTime}`,
+    overdue ? dateLabel : (task.time && endTime && `${task.time} · ${endTime}`),
     DL[task.duration],
     task.label,
   ].filter(Boolean)
@@ -682,7 +688,7 @@ function ListRow({ task, subStats, onClick, onToggleDone }) {
           {meta.map((item, i) => (
             <span key={i}>
               {i > 0 && <span style={{ color: T.dim, margin: "0 4px" }}>·</span>}
-              <span style={item === task.label ? { color: lc.pastelText, fontWeight: 500 } : {}}>
+              <span style={item === task.label ? { color: lc.pastelText, fontWeight: 500 } : item === dateLabel ? { color: "#EF4444", fontWeight: 500 } : {}}>
                 {item}
               </span>
             </span>
