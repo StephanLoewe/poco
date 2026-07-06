@@ -507,10 +507,8 @@ function TaskBlock({ task, onClick, onReschedule, dayAtX, scrollRef, lane }) {
           {mode === "resize" ? `${curTime} · ${DL[curDur] || curDur + "min"}` : (mode === "move" ? curTime : task.time)}
         </span>
       )}
-      {/* Resize handle */}
-      <div onPointerDown={onResizeDown} style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 14, cursor: "ns-resize", touchAction: "none", display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 2 }}>
-        <div style={{ width: 22, height: 3, borderRadius: 2, background: "rgba(255,255,255,0.55)" }} />
-      </div>
+      {/* Resize touch zone — invisible; the drag still works, just no visual bar */}
+      <div onPointerDown={onResizeDown} style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 14, cursor: "ns-resize", touchAction: "none" }} />
     </div>
   )
 }
