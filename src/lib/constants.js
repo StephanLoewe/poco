@@ -38,7 +38,7 @@ export const EC = [
   { v:  2, icon: "▸▸", l: "Anstrengend",       c: "#EA580C" },
   { v:  3, icon: "▸▸▸",l: "Sehr anstrengend",  c: "#DC2626" },
 ]
-export const APP_VERSION = "2.17"
+export const APP_VERSION = "2.18"
 export const DURS = [2, 15, 30, 45, 60, 90, 120, 150, 180, 240]
 export const DL   = { 2:"2min", 15:"15min", 30:"30min", 45:"45min", 60:"1h", 90:"1.5h", 120:"2h", 150:"2.5h", 180:"3h", 240:"4h" }
 export const WDAY = ["So","Mo","Di","Mi","Do","Fr","Sa"]

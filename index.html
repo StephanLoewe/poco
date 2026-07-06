@@ -12,32 +12,13 @@
     <title>Structured Planner</title>
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-      html { height: 100%; }
-      body {
+      html, body, #root {
+        height: 100%;
         background: #F4F6FB;
-        height: var(--app-height, 100vh);
         overflow: hidden;
         overscroll-behavior: none;
       }
-      #root {
-        height: var(--app-height, 100vh);
-        overflow: hidden;
-      }
     </style>
-    <script>
-      // iOS Safari reports vh/dvh unreliably (toolbar height gap). Measure the
-      // actual visible viewport directly and expose it as --app-height.
-      (function () {
-        function setAppHeight() {
-          var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
-          document.documentElement.style.setProperty("--app-height", h + "px");
-        }
-        setAppHeight();
-        window.addEventListener("resize", setAppHeight);
-        window.addEventListener("orientationchange", setAppHeight);
-        if (window.visualViewport) window.visualViewport.addEventListener("resize", setAppHeight);
-      })();
-    </script>
   </head>
   <body>
     <div id="root"></div>
