@@ -15,17 +15,29 @@
       html { height: 100%; }
       body {
         background: #F4F6FB;
-        height: 100vh;
-        height: 100dvh;
+        height: var(--app-height, 100vh);
         overflow: hidden;
         overscroll-behavior: none;
       }
       #root {
-        height: 100vh;
-        height: 100dvh;
+        height: var(--app-height, 100vh);
         overflow: hidden;
       }
     </style>
+    <script>
+      // iOS Safari reports vh/dvh unreliably (toolbar height gap). Measure the
+      // actual visible viewport directly and expose it as --app-height.
+      (function () {
+        function setAppHeight() {
+          var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+          document.documentElement.style.setProperty("--app-height", h + "px");
+        }
+        setAppHeight();
+        window.addEventListener("resize", setAppHeight);
+        window.addEventListener("orientationchange", setAppHeight);
+        if (window.visualViewport) window.visualViewport.addEventListener("resize", setAppHeight);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
