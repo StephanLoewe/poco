@@ -1694,6 +1694,9 @@ export default function App() {
         {secretModal && <SecretModal current={apiSecret()} onSave={handleSaveSecret} onClose={() => setSecretModal(false)} />}
         <Toast msg={toast} />
 
+        {/* White fade behind the floating tab bar so the bottom edge reads white, not the gray app bg */}
+        <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, height: "calc(env(safe-area-inset-bottom) + 96px)", background: "linear-gradient(to top, var(--color-surface) 0%, var(--color-surface) 55%, rgba(255,255,255,0) 100%)", zIndex: 80, pointerEvents: "none" }} />
+
         <TabBar view={view} setView={setView}
           onAdd={() => setModal({ task: { date: "", time: "" } })} />
       </div>
