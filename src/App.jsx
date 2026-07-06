@@ -714,24 +714,6 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      {/* Day header row */}
-      <div style={{ display: "flex", background: T.surface, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
-        <div style={{ width: COL_W, flexShrink: 0 }} />
-        <div ref={headerRef} style={{ flex: 1, overflowX: "hidden", display: "flex" }}>
-          {days.map(d => {
-            const dk = dKey(d); const isT = dk === today
-            return (
-              <div key={dk} style={{ flex: numDays === 1 ? 1 : undefined, width: numDays > 1 ? dayWidth : undefined, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "7px 4px", borderLeft: `1px solid ${T.border}` }}>
-                <div style={{ fontSize: 9, color: isT ? "#2563EB" : T.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: isT ? 600 : 400 }}>{WDAY[d.getDay()]}</div>
-                <div style={{ fontSize: 14, fontWeight: 700, width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: isT ? "#2563EB" : "transparent", color: isT ? "white" : T.text, flexShrink: 0 }}>
-                  {d.getDate()}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
       {/* Unscheduled tray — drag a chip down onto the timeline to schedule it */}
       {showUnscheduled && unscheduled.length > 0 && (
         <div style={{ background: T.subtle, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
@@ -749,6 +731,24 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
           )}
         </div>
       )}
+
+      {/* Day header row */}
+      <div style={{ display: "flex", background: T.surface, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+        <div style={{ width: COL_W, flexShrink: 0 }} />
+        <div ref={headerRef} style={{ flex: 1, overflowX: "hidden", display: "flex" }}>
+          {days.map(d => {
+            const dk = dKey(d); const isT = dk === today
+            return (
+              <div key={dk} style={{ flex: numDays === 1 ? 1 : undefined, width: numDays > 1 ? dayWidth : undefined, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "7px 4px", borderLeft: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: 9, color: isT ? "#2563EB" : T.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: isT ? 600 : 400 }}>{WDAY[d.getDay()]}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: isT ? "#2563EB" : "transparent", color: isT ? "white" : T.text, flexShrink: 0 }}>
+                  {d.getDate()}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
 
       {/* All-day strip */}
       {hasAllDay && (
