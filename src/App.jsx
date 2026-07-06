@@ -124,7 +124,10 @@ function TaskModal({ task, onSave, onDelete, onClose, allTasks = [], onAddSubtas
   const isProject  = children.length > 0
   const doneKids   = children.filter(t => t.status === "done").length
   const parentTask = f.parentId ? allTasks.find(t => t.id === f.parentId) : null
-  const candidates = allTasks.filter(t => !t.parentId && t.id !== f.id)
+  // Only open tasks can be picked as a project, newest first (id encodes creation time)
+  const candidates = allTasks
+    .filter(t => !t.parentId && t.id !== f.id && t.status !== "done")
+    .sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
   const [subInput, setSubInput]       = useState("")
   const [showProjPick, setShowProjPick] = useState(false)
   const addSub = () => { const t = subInput.trim(); if (!t) return; onAddSubtask?.(f.id, t); setSubInput("") }
