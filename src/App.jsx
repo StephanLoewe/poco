@@ -779,7 +779,7 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
       {/* Timeline */}
       <div ref={ref} onScroll={syncHeaders} style={{ flex: 1, overflowY: "auto", display: "flex" }}>
         {/* Hour labels */}
-        <div style={{ width: COL_W, flexShrink: 0, position: "sticky", left: 0, background: T.surface, zIndex: 5 }}>
+        <div style={{ width: COL_W, height: 24 * HOUR_H, flexShrink: 0, position: "sticky", left: 0, background: T.surface, zIndex: 25 }}>
           {Array.from({ length: 24 }, (_, h) => (
             <div key={h} style={{ position: "absolute", top: h * HOUR_H, right: 0, left: 0, display: "flex", justifyContent: "flex-end", paddingRight: 8, boxSizing: "border-box" }}>
               {h ? <span style={{ fontSize: 10, color: T.dim, fontWeight: 500, transform: "translateY(-50%)", display: "block", background: T.surface, paddingLeft: 2 }}>{pad(h)}:00</span> : null}
