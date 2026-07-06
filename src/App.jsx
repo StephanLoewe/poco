@@ -678,7 +678,7 @@ function UnscheduledChip({ task, dayAtX, scrollRef, onDrag, onSchedule }) {
 }
 
 // ─── MultiDayView (DayView + WeekView unified) ────────────────
-function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick, onReschedule, showUnscheduled, onSchedule }) {
+function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick, onReschedule, showUnscheduled, onSchedule, pendingBlock }) {
   const ref        = useRef()
   const headerRef  = useRef()
   const allDayRef  = useRef()
@@ -793,6 +793,7 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
             const timedTasks = tasks.filter(t => t.date === dk && t.time && !t.allDay)
             const lanes = layoutDay(timedTasks)
             const preview = dropTarget?.dk === dk ? dropTarget : null
+            const pending = pendingBlock?.date === dk ? pendingBlock : null
             return (
               <div key={dk} ref={el => { colRefs.current[dk] = el }} style={{ flex: numDays === 1 ? 1 : undefined, width: numDays > 1 ? dayWidth : undefined, flexShrink: 0, position: "relative", background: T.surface, borderLeft: `1px solid ${T.border}` }}
                 onClick={e => {
@@ -811,6 +812,12 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
                     <span style={{ fontSize: 10, fontWeight: 700, color: "#2563EB" }}>{`${pad(Math.floor(preview.min / 60) % 24)}:${pad(preview.min % 60)}`}</span>
                   </div>
                 )}
+                {pending && (
+                  <div style={{ position: "absolute", top: tPx(pending.time), left: 2, right: 2, height: dPx(pending.duration), background: "rgba(37,99,235,0.16)", border: "1.5px dashed #2563EB", borderRadius: 6, zIndex: 14, pointerEvents: "none", boxSizing: "border-box", padding: "3px 7px", display: "flex", flexDirection: "column" }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "#2563EB", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{pending.title || "Neuer Termin"}</span>
+                    <span style={{ fontSize: 10, color: "#2563EB", opacity: 0.8 }}>{pending.time}</span>
+                  </div>
+                )}
               </div>
             )
           })}
@@ -825,12 +832,12 @@ function DayView({ tasks, date, onTaskClick, onTimeClick }) {
 }
 
 // ─── WeekView ─────────────────────────────────────────────────
-function WeekView({ tasks, date, dayWidth, onTaskClick, onTimeClick, onReschedule, showUnscheduled, onSchedule }) {
+function WeekView({ tasks, date, dayWidth, onTaskClick, onTimeClick, onReschedule, showUnscheduled, onSchedule, pendingBlock }) {
   const mon = getMon(date)
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflowX: dayWidth ? "hidden" : "auto", overflowY: "hidden" }}>
-        <MultiDayView tasks={tasks} date={mon} numDays={7} dayWidth={dayWidth || 110} onTaskClick={onTaskClick} onTimeClick={onTimeClick} onReschedule={onReschedule} showUnscheduled={showUnscheduled} onSchedule={onSchedule} />
+        <MultiDayView tasks={tasks} date={mon} numDays={7} dayWidth={dayWidth || 110} onTaskClick={onTaskClick} onTimeClick={onTimeClick} onReschedule={onReschedule} showUnscheduled={showUnscheduled} onSchedule={onSchedule} pendingBlock={pendingBlock} />
       </div>
     </div>
   )
@@ -1619,6 +1626,12 @@ export default function App() {
     setTimeout(() => doSyncRef.current?.(), 300)
   }
 
+  // While the modal is open for a brand-new timed task (calendar click),
+  // show a live preview block at that spot. Cancel → nothing persisted.
+  const pendingBlock = modal && !modal.task.id && modal.task.date && modal.task.time
+    ? { date: modal.task.date, time: modal.task.time, duration: modal.task.duration || 30 }
+    : null
+
   return (
     <>
       <style>{`
@@ -1655,13 +1668,13 @@ export default function App() {
         {view === "day" && (
           <MultiDayView tasks={tasks} date={date} numDays={dayViewDays} dayWidth={dayViewDays > 1 ? Math.floor((calW - COL_W) / dayViewDays) : undefined}
             onTaskClick={t => setModal({ task: t })} onReschedule={handleReschedule}
-            showUnscheduled onSchedule={handleSchedule}
+            showUnscheduled onSchedule={handleSchedule} pendingBlock={pendingBlock}
             onTimeClick={(t, d) => setModal({ task: { time: t, date: d ?? dKey(date) } })} />
         )}
         {view === "week" && (
           <WeekView tasks={tasks} date={date} dayWidth={isMobile ? undefined : weekDayW}
             onTaskClick={t => setModal({ task: t })} onReschedule={handleReschedule}
-            showUnscheduled onSchedule={handleSchedule}
+            showUnscheduled onSchedule={handleSchedule} pendingBlock={pendingBlock}
             onTimeClick={(t, d) => setModal({ task: { time: t, date: d } })} />
         )}
         {view === "list" && (
