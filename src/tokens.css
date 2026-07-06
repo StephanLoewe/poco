@@ -25,6 +25,11 @@
   --purple-500: #6D28D9;
   --purple-600: #5B21B6;
 
+  --orange-100: #FBEEE3;
+  --orange-200: #F5C9A3;
+  --orange-500: #EA6A28;
+  --orange-600: #C2551E;
+
   --gray-0:   #FFFFFF;
   --gray-100: #F4F6FB;
   --gray-150: #EFF2F9;
@@ -66,11 +71,11 @@
   --label-fun-text:   var(--green-500);
 
   /* ── Label — Tasks ── */
-  --label-tasks-solid:  var(--purple-500);
-  --label-tasks-dark:   var(--purple-600);
-  --label-tasks-pastel: var(--purple-100);
-  --label-tasks-border: var(--purple-200);
-  --label-tasks-text:   var(--purple-500);
+  --label-tasks-solid:  var(--orange-500);
+  --label-tasks-dark:   var(--orange-600);
+  --label-tasks-pastel: var(--orange-100);
+  --label-tasks-border: var(--orange-200);
+  --label-tasks-text:   var(--orange-500);
 
   /* ── Spacing ── */
   --spacing-xs: 4px;
