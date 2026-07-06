@@ -100,6 +100,36 @@ function CalendarMapModal({ googleCals, onSave, onSkip }) {
   )
 }
 
+// ─── SecretModal ──────────────────────────────────────────────
+function SecretModal({ current, onSave, onClose }) {
+  const [v, setV] = useState(current || "")
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,25,55,0.4)", backdropFilter: "blur(10px)", zIndex: 999, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: T.surface, borderRadius: "22px 22px 0 0", width: "100%", maxWidth: 430, padding: "24px 20px 44px", boxShadow: "0 -8px 40px rgba(0,0,0,0.12)" }}>
+        <div style={{ width: 36, height: 4, background: T.dim, borderRadius: 2, margin: "0 auto 20px" }} />
+        <div style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 4 }}>🔑 Sync-Passwort</div>
+        <div style={{ fontSize: 12, color: T.muted, marginBottom: 16 }}>Auf allen Geräten gleich — verbindet diese App mit deinen gespeicherten Aufgaben.</div>
+
+        <input
+          value={v} onChange={e => setV(e.target.value)} autoFocus
+          onKeyDown={e => e.key === "Enter" && v.trim() && onSave(v.trim())}
+          placeholder="Passwort"
+          style={{ fontFamily: "inherit", background: T.subtle, color: T.text, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 14px", fontSize: 14, width: "100%", boxSizing: "border-box", outline: "none" }}
+        />
+
+        <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1px solid ${T.border}`, background: T.subtle, color: T.muted, cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>Abbrechen</button>
+          <button onClick={() => v.trim() && onSave(v.trim())}
+            style={{ flex: 2, padding: 12, borderRadius: 12, border: "none", background: v.trim() ? "#2563EB" : T.subtle, color: v.trim() ? "white" : T.muted, cursor: v.trim() ? "pointer" : "default", fontSize: 14, fontWeight: 600, fontFamily: "inherit" }}>
+            Speichern
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── TaskModal ────────────────────────────────────────────────
 function TaskModal({ task, onSave, onDelete, onClose, allTasks = [], onAddSubtask, onToggleSubtask, onOpenSubtask }) {
   const isNew = !task.id
@@ -1168,6 +1198,7 @@ export default function App() {
   const [authed,  setAuthed ] = useState(false)
   const [needsSecret, setNeedsSecret] = useState(!localStorage.getItem("poco-secret"))
   const [calPicker, setCalPicker] = useState(null) // list of google cals for mapping UI
+  const [secretModal, setSecretModal] = useState(false)
 
   const showToast = (m, ms = 3000) => { setToast(m); setTimeout(() => setToast(""), ms) }
 
@@ -1417,12 +1448,13 @@ export default function App() {
     setTasks(updated); persist(updated)
   }
 
-  // Ask for the shared sync password (POCO_SECRET) and re-sync
-  const handleSetSecret = () => {
-    const cur = apiSecret()
-    const v = window.prompt("Sync-Passwort (auf allen Geräten gleich):", cur)
-    if (v == null) return
-    localStorage.setItem("poco-secret", v.trim())
+  // Ask for the shared sync password (POCO_SECRET) and re-sync.
+  // Uses an in-app modal instead of window.prompt() — embedded WebViews
+  // (e.g. Obsidian's Open Gate / Custom Frames) block native prompt dialogs.
+  const handleSetSecret = () => setSecretModal(true)
+  const handleSaveSecret = (v) => {
+    localStorage.setItem("poco-secret", v)
+    setSecretModal(false)
     setNeedsSecret(false)
     showToast("Passwort gespeichert, synchronisiere …", 3000)
     setTimeout(() => doSyncRef.current?.(), 300)
@@ -1485,6 +1517,7 @@ export default function App() {
         {modal && <TaskModal task={modal.task} allTasks={tasks} onSave={handleSave} onDelete={handleDelete} onClose={() => setModal(null)}
           onAddSubtask={handleAddSubtask} onToggleSubtask={handleToggleDone} onOpenSubtask={c => setModal({ task: c })} />}
         {calPicker && <CalendarMapModal googleCals={calPicker.list} onSave={handleCalMapSave} onSkip={handleCalMapSkip} />}
+        {secretModal && <SecretModal current={apiSecret()} onSave={handleSaveSecret} onClose={() => setSecretModal(false)} />}
         <Toast msg={toast} />
 
         <TabBar view={view} setView={setView}
