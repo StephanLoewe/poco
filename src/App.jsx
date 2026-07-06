@@ -481,7 +481,7 @@ function TaskBlock({ task, onClick, onReschedule, dayAtX, scrollRef, lane }) {
       style={{
         position: "absolute", top, left: laneLeft, width: laneWidth, height: ht, minHeight: 24,
         background: lc.solid,
-        borderRadius: 7,
+        borderRadius: 6,
         padding: tiny ? "2px 6px" : "5px 7px",
         cursor: "pointer", overflow: "hidden", boxSizing: "border-box",
         opacity: done ? 0.4 : 1,
