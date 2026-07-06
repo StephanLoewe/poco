@@ -14,7 +14,10 @@
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
       html, body, #root {
         height: 100%;
-        background: #F4F6FB;
+        /* White base so the iOS home-indicator strip (which fixed bottom:0
+           doesn't reach) reads white, not the app's gray bg. The app's own
+           #F4F6FB is painted by the app root on top of this. */
+        background: #FFFFFF;
         overflow: hidden;
         overscroll-behavior: none;
       }
