@@ -565,8 +565,120 @@ function layoutDay(dayTasks) {
   return res
 }
 
+// A chip in the "Ungeplant" tray — long-press to lift, drag onto the
+// timeline to schedule it (assigns the dropped day + time).
+function UnscheduledChip({ task, dayAtX, scrollRef, onDrag, onSchedule }) {
+  const lc  = LC[task.label] || LC.Arbeit
+  const dur = task.duration || 30
+  const [drag, setDrag] = useState(null)   // null | { x, y, time }
+  const timer   = useRef(null)
+  const active  = useRef(false)
+  const startX  = useRef(0)
+  const startY  = useRef(0)
+  const lastPtr = useRef({ x: 0, y: 0 })
+  const pid     = useRef(null)
+  const autoDir = useRef(0)
+  const autoRAF = useRef(null)
+
+  const clearTimer = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null } }
+  const stopAuto   = () => { autoDir.current = 0; if (autoRAF.current) { cancelAnimationFrame(autoRAF.current); autoRAF.current = null } }
+
+  // Resolve the drop target from a viewport point → { dk, min, dur, title } or null.
+  // Also reports it upward so the timeline can draw a preview.
+  const resolveTarget = (x, y) => {
+    const cont = scrollRef?.current
+    if (!cont) return null
+    const cr = cont.getBoundingClientRect()
+    const over = y >= cr.top && y <= cr.bottom && x >= cr.left && x <= cr.right
+    const day  = over ? dayAtX?.(x) : null
+    if (!day) { onDrag?.(null); return null }
+    const raw = (y - cr.top) + cont.scrollTop
+    const min = Math.max(0, Math.min(1440 - dur, Math.round(raw / 15) * 15))
+    const target = { dk: day.dk, min, dur, title: task.title }
+    onDrag?.(target)
+    return target
+  }
+  const m2t = (m) => `${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`
+
+  const startAuto = () => {
+    if (autoRAF.current) return
+    const loop = () => {
+      if (autoDir.current === 0) { autoRAF.current = null; return }
+      const cont = scrollRef?.current
+      if (cont) cont.scrollTop = Math.max(0, cont.scrollTop + autoDir.current * 9)
+      const t = resolveTarget(lastPtr.current.x, lastPtr.current.y)
+      setDrag(d => d ? { ...d, time: t ? m2t(t.min) : null } : d)
+      autoRAF.current = requestAnimationFrame(loop)
+    }
+    autoRAF.current = requestAnimationFrame(loop)
+  }
+
+  const onPointerDown = (e) => {
+    pid.current = e.pointerId
+    startX.current = e.clientX; startY.current = e.clientY
+    clearTimer()
+    const node = e.currentTarget
+    const ix = e.clientX, iy = e.clientY
+    timer.current = setTimeout(() => {
+      active.current = true
+      lastPtr.current = { x: ix, y: iy }
+      setDrag({ x: ix, y: iy, time: null })
+      try { node.setPointerCapture(pid.current) } catch {}
+      if (navigator.vibrate) navigator.vibrate(12)
+    }, 300)
+  }
+  const onPointerMove = (e) => {
+    if (!active.current) {
+      if (Math.abs(e.clientX - startX.current) > 10 || Math.abs(e.clientY - startY.current) > 10) clearTimer()
+      return
+    }
+    e.preventDefault()
+    lastPtr.current = { x: e.clientX, y: e.clientY }
+    const t = resolveTarget(e.clientX, e.clientY)
+    setDrag({ x: e.clientX, y: e.clientY, time: t ? m2t(t.min) : null })
+    const cont = scrollRef?.current
+    if (cont) {
+      const cr = cont.getBoundingClientRect()
+      autoDir.current = e.clientY < cr.top + 45 ? -1 : e.clientY > cr.bottom - 45 ? 1 : 0
+      autoDir.current !== 0 ? startAuto() : stopAuto()
+    }
+  }
+  const onPointerUp = (e) => {
+    clearTimer(); stopAuto()
+    if (!active.current) return
+    active.current = false
+    const t = resolveTarget(e.clientX, e.clientY)
+    onDrag?.(null)
+    setDrag(null)
+    if (t) onSchedule?.(task.id, t.dk, m2t(t.min))
+  }
+
+  return (
+    <div
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      style={{
+        flexShrink: 0, fontSize: 11, fontWeight: 600, color: lc.pastelText,
+        background: lc.pastel, border: `1px solid ${lc.pastelBrd}`, borderRadius: 8,
+        padding: "6px 10px", cursor: "grab", touchAction: drag ? "none" : "auto",
+        maxWidth: 160, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
+        opacity: drag ? 0.35 : 1, userSelect: "none",
+      }}>
+      {task.title}
+      {drag && (
+        <div style={{ position: "fixed", left: drag.x, top: drag.y, transform: "translate(-50%, -130%)", zIndex: 999, pointerEvents: "none", background: lc.solid, color: "white", fontSize: 11, fontWeight: 600, padding: "5px 9px", borderRadius: 7, boxShadow: "0 8px 24px rgba(0,0,0,0.32)", whiteSpace: "nowrap", display: "flex", gap: 6, alignItems: "center" }}>
+          <span style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis" }}>{task.title}</span>
+          {drag.time && <span style={{ opacity: 0.85, fontWeight: 700 }}>{drag.time}</span>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── MultiDayView (DayView + WeekView unified) ────────────────
-function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick, onReschedule }) {
+function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick, onReschedule, showUnscheduled, onSchedule }) {
   const ref        = useRef()
   const headerRef  = useRef()
   const allDayRef  = useRef()
@@ -574,6 +686,10 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
   const today = dKey(new Date())
   const days  = Array.from({ length: numDays }, (_, i) => dPlus(date, i))
   const hasAllDay = days.some(d => tasks.some(t => t.date === dKey(d) && t.allDay))
+  const [trayOpen, setTrayOpen]     = useState(true)
+  const [dropTarget, setDropTarget] = useState(null)  // { dk, min, dur } during a tray drag
+  // Mirrors the Inbox (dateless, non-subtask, open) — drag one onto the timeline to schedule it
+  const unscheduled = showUnscheduled ? tasks.filter(t => !t.date && !t.parentId && t.status !== "done") : []
 
   // Resolve which day column sits under a given viewport X (for cross-day drag)
   const dayAtX = (clientX) => {
@@ -616,6 +732,24 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
         </div>
       </div>
 
+      {/* Unscheduled tray — drag a chip down onto the timeline to schedule it */}
+      {showUnscheduled && unscheduled.length > 0 && (
+        <div style={{ background: T.subtle, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+          <button onClick={() => setTrayOpen(o => !o)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
+            <span style={{ fontSize: 9, color: T.muted, textTransform: "uppercase", letterSpacing: "0.07em", fontWeight: 600 }}>Ungeplant</span>
+            <span style={{ fontSize: 9, color: T.dim, fontWeight: 600 }}>{unscheduled.length}</span>
+            <span style={{ marginLeft: "auto", fontSize: 10, color: T.dim, transform: trayOpen ? "none" : "rotate(-90deg)", transition: "transform 0.2s" }}>▾</span>
+          </button>
+          {trayOpen && (
+            <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "0 14px 8px", WebkitOverflowScrolling: "touch" }}>
+              {unscheduled.map(t => (
+                <UnscheduledChip key={t.id} task={t} dayAtX={dayAtX} scrollRef={ref} onDrag={setDropTarget} onSchedule={onSchedule} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* All-day strip */}
       {hasAllDay && (
         <div style={{ display: "flex", background: T.subtle, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
@@ -656,8 +790,9 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
         <div style={{ display: "flex", flex: 1, minHeight: 24 * HOUR_H }}>
           {days.map(d => {
             const dk = dKey(d); const isT = dk === today
-            const timedTasks = tasks.filter(t => t.date === dk && !t.allDay)
+            const timedTasks = tasks.filter(t => t.date === dk && t.time && !t.allDay)
             const lanes = layoutDay(timedTasks)
+            const preview = dropTarget?.dk === dk ? dropTarget : null
             return (
               <div key={dk} ref={el => { colRefs.current[dk] = el }} style={{ flex: numDays === 1 ? 1 : undefined, width: numDays > 1 ? dayWidth : undefined, flexShrink: 0, position: "relative", background: T.surface, borderLeft: `1px solid ${T.border}` }}
                 onClick={e => {
@@ -671,6 +806,11 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
                 <HourGrid />
                 {isT && <NowLine />}
                 {timedTasks.map(t => <TaskBlock key={t.id} task={t} lane={lanes.get(t.id)} onReschedule={onReschedule} dayAtX={dayAtX} scrollRef={ref} onClick={e => { e.stopPropagation(); onTaskClick(t) }} />)}
+                {preview && (
+                  <div style={{ position: "absolute", top: preview.min, left: 2, right: 2, height: dPx(preview.dur), background: "rgba(37,99,235,0.18)", border: "1.5px dashed #2563EB", borderRadius: 6, zIndex: 15, pointerEvents: "none", boxSizing: "border-box", padding: "2px 6px" }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: "#2563EB" }}>{`${pad(Math.floor(preview.min / 60) % 24)}:${pad(preview.min % 60)}`}</span>
+                  </div>
+                )}
               </div>
             )
           })}
@@ -1452,6 +1592,14 @@ export default function App() {
     handleSave({ ...t, time, duration, date: date ?? t.date })
   }
 
+  // Schedule an unscheduled task by dropping it onto the calendar.
+  const handleSchedule = (id, date, time) => {
+    const t = tasks.find(x => x.id === id)
+    if (!t) return
+    handleSave({ ...t, date, time, duration: t.duration || 30 })
+    showToast("Eingeplant ✓")
+  }
+
   const handleAddSubtask = (parentId, title) => {
     const parent = tasks.find(t => t.id === parentId)
     const t = { id: uid(), title, date: "", time: nowT(), duration: 30, label: parent?.label || "Arbeit", priority: "P3", energy: 0, status: "open", parentId }
@@ -1507,6 +1655,7 @@ export default function App() {
         {view === "day" && (
           <MultiDayView tasks={tasks} date={date} numDays={dayViewDays} dayWidth={dayViewDays > 1 ? Math.floor((calW - COL_W) / dayViewDays) : undefined}
             onTaskClick={t => setModal({ task: t })} onReschedule={handleReschedule}
+            showUnscheduled onSchedule={handleSchedule}
             onTimeClick={(t, d) => setModal({ task: { time: t, date: d ?? dKey(date) } })} />
         )}
         {view === "week" && (
