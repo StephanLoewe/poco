@@ -1222,7 +1222,11 @@ export default function App() {
   const doSyncRef = useRef(null)
   useEffect(() => { doSyncRef.current = doSync })
   useEffect(() => {
-    if (!authed || Object.keys(cals).length === 0) return
+    // Auto-sync needs either a working Google Calendar connection, or (more
+    // commonly, e.g. when embedded without Google available) just the
+    // backend sync password — the backend read/write never needs Google.
+    const hasCalendarSync = authed && Object.keys(cals).length > 0
+    if (!apiSecret() && !hasCalendarSync) return
     doSyncRef.current?.()
     const id = setInterval(() => doSyncRef.current?.(), 30 * 60 * 1000)
     return () => clearInterval(id)
@@ -1285,15 +1289,11 @@ export default function App() {
     if (syncing) return
     setSyncing(true)
     try {
-      let calMap = cals
-      if (Object.keys(calMap).length === 0) {
-        calMap = await connectCalendars()
-        if (!calMap) { setSyncing(false); return }
-      }
-
       showToast("Synchronisiere …", 15000)
 
-      // Load latest state from the backend first (picks up other devices).
+      // Load latest state from the backend first (picks up other devices) —
+      // independent of Google, so this works even where Google Sign-In can't
+      // load (e.g. embedded WebViews like Obsidian's Open Gate/Custom Frames).
       // Timeout-guarded so a stalled request can't freeze the sync.
       let remoteData = null; let remoteErr = null
       if (apiSecret()) {
@@ -1324,50 +1324,64 @@ export default function App() {
       })
       let current = [...base]; let added = 0; let updated = 0
 
-      // ±2 Wochen um heute
-      const winStart = dPlus(getMon(new Date()), -14)
-      const winEnd   = dPlus(getMon(new Date()),  21)
+      // Google Calendar sync is best-effort and must never block the backend
+      // sync above — if Google Sign-In is unavailable (GIS didn't load, no
+      // auth yet), just skip it for this run and keep the backend-based tasks.
+      let calMap = cals
+      try {
+        if (Object.keys(calMap).length === 0) {
+          const resolved = await connectCalendars()
+          if (resolved) calMap = resolved
+        }
 
-      for (const [lbl, id] of Object.entries(calMap)) {
-        if (!id) continue
-        const evs = await gEvents(id, winStart.toISOString(), winEnd.toISOString())
-        if (!Array.isArray(evs)) continue
-        for (const ev of evs) {
-          const isAllDay = !ev.start?.dateTime
-          const s = isAllDay
-            ? new Date(ev.start.date + "T00:00:00")
-            : new Date(ev.start.dateTime)
-          const e = isAllDay
-            ? new Date(ev.end.date + "T00:00:00")
-            : new Date(ev.end.dateTime)
-          const rawDur = Math.round((e - s) / 60000)
-          const dur    = rawDur > 240 ? rawDur : DURS.reduce((p, c) => Math.abs(c - rawDur) < Math.abs(p - rawDur) ? c : p)
-          const newDate = dKey(s)
-          const newTime = `${pad(s.getHours())}:${pad(s.getMinutes())}`
-          const newTitle = ev.summary || "Unbenannt"
+        // ±2 Wochen um heute
+        const winStart = dPlus(getMon(new Date()), -14)
+        const winEnd   = dPlus(getMon(new Date()),  21)
 
-          // Primary dedup: gcalId. Fallback: title+date+time catches the same event
-          // appearing with different IDs in connected/shared Workspace calendars.
-          const byId    = current.findIndex(t => t.gcalId === ev.id)
-          const byMatch = byId === -1
-            ? current.findIndex(t => t.date === newDate && t.time === newTime && t.title === newTitle)
-            : -1
-          const idx = byId !== -1 ? byId : byMatch
-          if (idx === -1) {
-            current.push({ id: uid(), title: newTitle, date: newDate, time: newTime, duration: dur, label: lbl, priority: "P3", energy: 0, status: "open", gcalId: ev.id, allDay: isAllDay || undefined })
-            added++
-          } else {
-            const existing = current[idx]
-            const changed = existing.title !== newTitle || existing.date !== newDate || existing.time !== newTime || existing.duration !== dur
-            if (changed) {
-              current[idx] = { ...existing, title: newTitle, date: newDate, time: newTime, duration: dur, allDay: isAllDay || undefined }
-              updated++
+        for (const [lbl, id] of Object.entries(calMap)) {
+          if (!id) continue
+          const evs = await gEvents(id, winStart.toISOString(), winEnd.toISOString())
+          if (!Array.isArray(evs)) continue
+          for (const ev of evs) {
+            const isAllDay = !ev.start?.dateTime
+            const s = isAllDay
+              ? new Date(ev.start.date + "T00:00:00")
+              : new Date(ev.start.dateTime)
+            const e = isAllDay
+              ? new Date(ev.end.date + "T00:00:00")
+              : new Date(ev.end.dateTime)
+            const rawDur = Math.round((e - s) / 60000)
+            const dur    = rawDur > 240 ? rawDur : DURS.reduce((p, c) => Math.abs(c - rawDur) < Math.abs(p - rawDur) ? c : p)
+            const newDate = dKey(s)
+            const newTime = `${pad(s.getHours())}:${pad(s.getMinutes())}`
+            const newTitle = ev.summary || "Unbenannt"
+
+            // Primary dedup: gcalId. Fallback: title+date+time catches the same event
+            // appearing with different IDs in connected/shared Workspace calendars.
+            const byId    = current.findIndex(t => t.gcalId === ev.id)
+            const byMatch = byId === -1
+              ? current.findIndex(t => t.date === newDate && t.time === newTime && t.title === newTitle)
+              : -1
+            const idx = byId !== -1 ? byId : byMatch
+            if (idx === -1) {
+              current.push({ id: uid(), title: newTitle, date: newDate, time: newTime, duration: dur, label: lbl, priority: "P3", energy: 0, status: "open", gcalId: ev.id, allDay: isAllDay || undefined })
+              added++
+            } else {
+              const existing = current[idx]
+              const changed = existing.title !== newTitle || existing.date !== newDate || existing.time !== newTime || existing.duration !== dur
+              if (changed) {
+                current[idx] = { ...existing, title: newTitle, date: newDate, time: newTime, duration: dur, allDay: isAllDay || undefined }
+                updated++
+              }
             }
           }
         }
+        setAuthed(true)
+      } catch (e) {
+        console.warn("Google Calendar sync skipped:", e?.message)
+        if (e.message === "token_expired" || e.message === "not_authed" || e.message === "auth_timeout") setAuthed(false)
       }
 
-      setAuthed(true)
       setTasks(current)
       await persist(current, calMap)
       const parts = [added > 0 && `${added} neu`, updated > 0 && `${updated} aktualisiert`].filter(Boolean)
