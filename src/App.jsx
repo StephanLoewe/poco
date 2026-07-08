@@ -567,7 +567,7 @@ function layoutDay(dayTasks) {
 
 // A chip in the "Ungeplant" tray — long-press to lift, drag onto the
 // timeline to schedule it (assigns the dropped day + time).
-function UnscheduledChip({ task, dayAtX, scrollRef, onDrag, onSchedule }) {
+function UnscheduledChip({ task, dayAtX, scrollRef, onDrag, onSchedule, block }) {
   const lc  = LC[task.label] || LC.Arbeit
   const dur = task.duration || 30
   const [drag, setDrag] = useState(null)   // null | { x, y, time }
@@ -660,11 +660,12 @@ function UnscheduledChip({ task, dayAtX, scrollRef, onDrag, onSchedule }) {
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
       style={{
-        flexShrink: 0, fontSize: 11, fontWeight: 600, color: lc.pastelText,
+        fontSize: 11, fontWeight: 600, color: lc.pastelText,
         background: lc.pastel, border: `1px solid ${lc.pastelBrd}`, borderRadius: 8,
         padding: "6px 10px", cursor: "grab", touchAction: drag ? "none" : "auto",
-        maxWidth: 160, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
+        overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
         opacity: drag ? 0.35 : 1, userSelect: "none",
+        ...(block ? { width: "100%", flexShrink: 0 } : { flexShrink: 0, maxWidth: 160 }),
       }}>
       {task.title}
       {drag && (
@@ -678,7 +679,7 @@ function UnscheduledChip({ task, dayAtX, scrollRef, onDrag, onSchedule }) {
 }
 
 // ─── MultiDayView (DayView + WeekView unified) ────────────────
-function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick, onReschedule, showUnscheduled, onSchedule, pendingBlock }) {
+function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick, onReschedule, showUnscheduled, onSchedule, pendingBlock, sideTray }) {
   const ref        = useRef()
   const headerRef  = useRef()
   const allDayRef  = useRef()
@@ -713,9 +714,26 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
   }
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      {/* Unscheduled tray — drag a chip down onto the timeline to schedule it */}
-      {showUnscheduled && unscheduled.length > 0 && (
+    <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+      {/* Desktop: unscheduled tasks as a left sidebar */}
+      {sideTray && showUnscheduled && (
+        <div style={{ width: 220, flexShrink: 0, borderRight: `1px solid ${T.border}`, background: T.surface, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "12px 14px 8px", flexShrink: 0 }}>
+            <span style={{ fontSize: 11, color: T.muted, textTransform: "uppercase", letterSpacing: "0.07em", fontWeight: 700 }}>Ungeplant</span>
+            <span style={{ fontSize: 11, color: T.dim, fontWeight: 600 }}>{unscheduled.length}</span>
+          </div>
+          <div style={{ flex: 1, overflowY: "auto", padding: "0 12px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
+            {unscheduled.length === 0 && <div style={{ fontSize: 12, color: T.dim, padding: "6px 2px", lineHeight: 1.4 }}>Keine ungeplanten Aufgaben — auf den Kalender ziehen, um sie zu planen.</div>}
+            {unscheduled.map(t => (
+              <UnscheduledChip key={t.id} task={t} block dayAtX={dayAtX} scrollRef={ref} onDrag={setDropTarget} onSchedule={onSchedule} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {/* Mobile: unscheduled tray as a strip above the calendar */}
+      {!sideTray && showUnscheduled && unscheduled.length > 0 && (
         <div style={{ background: T.subtle, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
           <button onClick={() => setTrayOpen(o => !o)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
             <span style={{ fontSize: 9, color: T.muted, textTransform: "uppercase", letterSpacing: "0.07em", fontWeight: 600 }}>Ungeplant</span>
@@ -823,6 +841,7 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
           })}
         </div>
       </div>
+      </div>
     </div>
   )
 }
@@ -832,12 +851,12 @@ function DayView({ tasks, date, onTaskClick, onTimeClick }) {
 }
 
 // ─── WeekView ─────────────────────────────────────────────────
-function WeekView({ tasks, date, dayWidth, onTaskClick, onTimeClick, onReschedule, showUnscheduled, onSchedule, pendingBlock }) {
+function WeekView({ tasks, date, dayWidth, onTaskClick, onTimeClick, onReschedule, showUnscheduled, onSchedule, pendingBlock, sideTray }) {
   const mon = getMon(date)
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflowX: dayWidth ? "hidden" : "auto", overflowY: "hidden" }}>
-        <MultiDayView tasks={tasks} date={mon} numDays={7} dayWidth={dayWidth || 110} onTaskClick={onTaskClick} onTimeClick={onTimeClick} onReschedule={onReschedule} showUnscheduled={showUnscheduled} onSchedule={onSchedule} pendingBlock={pendingBlock} />
+        <MultiDayView tasks={tasks} date={mon} numDays={7} dayWidth={dayWidth || 110} onTaskClick={onTaskClick} onTimeClick={onTimeClick} onReschedule={onReschedule} showUnscheduled={showUnscheduled} onSchedule={onSchedule} pendingBlock={pendingBlock} sideTray={sideTray} />
       </div>
     </div>
   )
@@ -1326,8 +1345,10 @@ function Toast({ msg }) {
 export default function App() {
   const w = useWidth()
   const isMobile = w < 700
-  // On desktop: how many days fit in the calendar area (minus time label column)
-  const calW    = w - (isMobile ? 0 : 32) // subtract page padding on desktop
+  // On desktop the unscheduled tasks sit in a left sidebar next to the calendar
+  const SIDEBAR_W = isMobile ? 0 : 220
+  // On desktop: how many days fit in the calendar area (minus time label column + sidebar)
+  const calW    = w - (isMobile ? 0 : 32) - SIDEBAR_W
   const dayViewDays = isMobile ? 1 : Math.min(7, Math.max(3, Math.floor((calW - COL_W) / 160)))
   const weekDayW    = isMobile ? 110 : Math.floor((calW - COL_W) / 7)
 
@@ -1668,13 +1689,13 @@ export default function App() {
         {view === "day" && (
           <MultiDayView tasks={tasks} date={date} numDays={dayViewDays} dayWidth={dayViewDays > 1 ? Math.floor((calW - COL_W) / dayViewDays) : undefined}
             onTaskClick={t => setModal({ task: t })} onReschedule={handleReschedule}
-            showUnscheduled onSchedule={handleSchedule} pendingBlock={pendingBlock}
+            showUnscheduled onSchedule={handleSchedule} pendingBlock={pendingBlock} sideTray={!isMobile}
             onTimeClick={(t, d) => setModal({ task: { time: t, date: d ?? dKey(date) } })} />
         )}
         {view === "week" && (
           <WeekView tasks={tasks} date={date} dayWidth={isMobile ? undefined : weekDayW}
             onTaskClick={t => setModal({ task: t })} onReschedule={handleReschedule}
-            showUnscheduled onSchedule={handleSchedule} pendingBlock={pendingBlock}
+            showUnscheduled onSchedule={handleSchedule} pendingBlock={pendingBlock} sideTray={!isMobile}
             onTimeClick={(t, d) => setModal({ task: { time: t, date: d } })} />
         )}
         {view === "list" && (
