@@ -875,8 +875,8 @@ function SubtaskRow({ task, onClick, onToggleDone }) {
         {done && <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12.5, color: done ? T.dim : T.text, textDecoration: done ? "line-through" : "none", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{task.title}</div>
-        {meta && <div style={{ fontSize: 10, color: T.muted, marginTop: 1 }}>{meta}</div>}
+        <div style={{ fontSize: 13.5, color: done ? T.dim : T.text, textDecoration: done ? "line-through" : "none", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{task.title}</div>
+        {meta && <div style={{ fontSize: 11, color: T.muted, marginTop: 1 }}>{meta}</div>}
       </div>
     </div>
   )
@@ -889,7 +889,7 @@ function ListView({ tasks, date, onTaskClick, onAdd, onToggleDone }) {
   const subStats = (id) => { const k = tasks.filter(x => x.parentId === id); return k.length ? { total: k.length, done: k.filter(x => x.status === "done").length } : null }
   const childrenOf = (id) => tasks.filter(x => x.parentId === id).sort((a, b) => (a.time || "").localeCompare(b.time || "") || a.title.localeCompare(b.title))
 
-  const overdue = tasks.filter(t => t.date && t.date < today && t.status === "open" && !t.parentId)
+  const overdue = tasks.filter(t => t.date && t.date < today && t.status === "open" && !t.parentId && !t.allDay)
     .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
   const [overdueOpen, setOverdueOpen] = useState(true)
 
@@ -917,7 +917,7 @@ function ListView({ tasks, date, onTaskClick, onAdd, onToggleDone }) {
       {days.map(d => {
         const dk   = dKey(d)
         const isT  = dk === today
-        const dt   = tasks.filter(t => t.date === dk && !t.parentId).sort((a, b) => a.time.localeCompare(b.time))
+        const dt   = tasks.filter(t => t.date === dk && !t.parentId && !t.allDay).sort((a, b) => a.time.localeCompare(b.time))
         const open = dt.filter(t => t.status === "open")
         const done = dt.filter(t => t.status === "done")
         const net  = open.reduce((s, t) => s + (t.energy ?? 0), 0)
@@ -1059,15 +1059,15 @@ function ListRow({ task, subStats, onClick, onToggleDone }) {
       <div
         onClick={e => { e.stopPropagation(); onToggleDone() }}
         style={{
-          width: 18, height: 18, borderRadius: 1000, flexShrink: 0,
-          border: `1.5px solid ${done ? lc.pastelText : T.dim}`,
+          width: 20, height: 20, borderRadius: 1000, flexShrink: 0,
+          border: `1.5px solid ${done ? lc.pastelText : T.muted}`,
           background: done ? lc.pastelText : "transparent",
           display: "flex", alignItems: "center", justifyContent: "center",
           transition: "all 0.15s",
         }}
       >
         {done && (
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <svg width="11" height="11" viewBox="0 0 10 10" fill="none">
             <path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         )}
@@ -1076,14 +1076,14 @@ function ListRow({ task, subStats, onClick, onToggleDone }) {
       {/* Info */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
-          fontSize: 13, fontWeight: 600,
+          fontSize: 15, fontWeight: 600, lineHeight: "21px",
           color: done ? T.dim : T.text,
           textDecoration: done ? "line-through" : "none",
           overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
         }}>
           {task.title}
         </div>
-        <div style={{ fontSize: 11, color: T.muted, marginTop: 3, display: "flex", alignItems: "center", gap: 0 }}>
+        <div style={{ fontSize: 12, color: T.muted, marginTop: 2, display: "flex", alignItems: "center", gap: 0 }}>
           {meta.map((item, i) => (
             <span key={i}>
               {i > 0 && <span style={{ color: T.dim, margin: "0 4px" }}>·</span>}
@@ -1118,6 +1118,7 @@ function InboxView({ tasks, onTaskClick, onAdd, onToggleDone }) {
   const open = inboxTasks.filter(t => t.status !== "done")
   const done = inboxTasks.filter(t => t.status === "done")
   const subStats = (id) => { const k = tasks.filter(x => x.parentId === id); return k.length ? { total: k.length, done: k.filter(x => x.status === "done").length } : null }
+  const childrenOf = (id) => tasks.filter(x => x.parentId === id).sort((a, b) => (a.time || "").localeCompare(b.time || "") || a.title.localeCompare(b.title))
 
   const handleAdd = () => {
     const title = input.trim()
@@ -1151,15 +1152,17 @@ function InboxView({ tasks, onTaskClick, onAdd, onToggleDone }) {
 
         {(open.length > 0 || done.length > 0) && (
           <div className="list-group" style={{ background: T.surface, borderRadius: 12, padding: "0 14px", border: `1px solid ${T.border}` }}>
-            {open.map(t => (
-              <SwipeRow key={t.id} task={t} subStats={subStats(t.id)} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />
-            ))}
+            {open.flatMap(t => [
+              <SwipeRow key={t.id} task={t} subStats={subStats(t.id)} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />,
+              ...childrenOf(t.id).map(c => <SubtaskRow key={c.id} task={c} onClick={() => onTaskClick(c)} onToggleDone={() => onToggleDone(c.id)} />),
+            ])}
             {done.length > 0 && open.length > 0 && (
               <div style={{ fontSize: 10, color: T.dim, textTransform: "uppercase", letterSpacing: "0.08em", padding: "10px 0 4px" }}>Erledigt</div>
             )}
-            {done.map(t => (
-              <SwipeRow key={t.id} task={t} subStats={subStats(t.id)} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />
-            ))}
+            {done.flatMap(t => [
+              <SwipeRow key={t.id} task={t} subStats={subStats(t.id)} onClick={() => onTaskClick(t)} onToggleDone={() => onToggleDone(t.id)} />,
+              ...childrenOf(t.id).map(c => <SubtaskRow key={c.id} task={c} onClick={() => onTaskClick(c)} onToggleDone={() => onToggleDone(c.id)} />),
+            ])}
           </div>
         )}
       </div>
