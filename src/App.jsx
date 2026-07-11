@@ -1635,22 +1635,38 @@ export default function App() {
     const existing = tasks.find(t => t.id === f.id)
     let gcalId = f.gcalId
     const calId = cals[f.label]
-    if (calId && authed && f.date && f.time) {
-      const s = `${f.date}T${f.time}:00`
-      const e = `${f.date}T${eAdd(f.time, f.duration)}:00`
-      try {
-        if (!existing || !gcalId) {
-          const res = await gCreate(calId, f.title, s, e)
-          if (res?.id) gcalId = res.id
-        } else {
-          await gUpdate(calId, gcalId, f.title, s, e)
-        }
-      } catch { /* save locally even if calendar fails */ }
+    // gcal outcome: null = not a timed event; else why it did / didn't reach Google
+    let gcal = null   // "ok" | "noauth" | "nomap" | "failed"
+    if (f.date && f.time) {
+      if (!authed)      gcal = "noauth"
+      else if (!calId)  gcal = "nomap"
+      else {
+        const s = `${f.date}T${f.time}:00`
+        const e = `${f.date}T${eAdd(f.time, f.duration)}:00`
+        try {
+          if (!existing || !gcalId) {
+            const res = await gCreate(calId, f.title, s, e)
+            if (res?.id) gcalId = res.id
+          } else {
+            await gUpdate(calId, gcalId, f.title, s, e)
+          }
+          gcal = "ok"
+        } catch (err) { console.warn("Google push failed:", err?.message); gcal = "failed" }
+      }
     }
     const fin     = { ...f, gcalId }
     const updated = existing ? tasks.map(t => t.id === f.id ? fin : t) : [...tasks, fin]
     setTasks(updated); persist(updated)
-    setModal(null); showToast(existing ? "Gespeichert ✓" : "Aufgabe erstellt ✓")
+    setModal(null)
+    const base = existing ? "Gespeichert" : "Aufgabe erstellt"
+    const msg =
+      gcal === "ok"     ? `${base}, in Google ✓` :
+      gcal === "noauth" ? `${base} — nicht in Google (nicht bei Google angemeldet)` :
+      gcal === "nomap"  ? `${base} — Label „${f.label}" ist keinem Google-Kalender zugeordnet` :
+      gcal === "failed" ? `${base} — Google-Sync fehlgeschlagen` :
+      `${base} ✓`
+    showToast(msg, gcal && gcal !== "ok" ? 6000 : 3000)
+    return gcal
   }
 
   const handleDelete = async (id) => {
@@ -1685,8 +1701,8 @@ export default function App() {
   const handleSchedule = (id, date, time) => {
     const t = tasks.find(x => x.id === id)
     if (!t) return
+    // handleSave shows an honest toast (whether or not it reached Google)
     handleSave({ ...t, date, time, duration: t.duration || 30 })
-    showToast("Eingeplant ✓")
   }
 
   const handleAddSubtask = (parentId, title) => {
