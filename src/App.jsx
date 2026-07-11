@@ -1545,7 +1545,7 @@ export default function App() {
       })
       // Drop anything the user deleted (by app id or by Google event id)
       base = base.filter(t => !deletedIds.has(t.id) && !(t.gcalId && deletedGcalIds.has(t.gcalId)))
-      let current = [...base]; let added = 0; let updated = 0
+      let current = [...base]; let added = 0; let updated = 0; let pushed = 0
 
       // Google Calendar sync is best-effort and must never block the backend
       // sync above — if Google Sign-In is unavailable (GIS didn't load, no
@@ -1600,6 +1600,22 @@ export default function App() {
             }
           }
         }
+
+        // Push any local-only timed tasks — created while signed out, or whose
+        // label wasn't mapped yet — up to Google now that we're connected.
+        for (let i = 0; i < current.length; i++) {
+          const t = current[i]
+          if (t.gcalId || t.allDay || !t.date || !t.time) continue
+          const calId = calMap[t.label]
+          if (!calId) continue
+          try {
+            const s = `${t.date}T${t.time}:00`
+            const e = `${t.date}T${eAdd(t.time, t.duration)}:00`
+            const res = await gCreate(calId, t.title, s, e)
+            if (res?.id) { current[i] = { ...t, gcalId: res.id }; pushed++ }
+          } catch (err) { console.warn("Push to Google failed:", t.title, err?.message) }
+        }
+
         setAuthed(true)
       } catch (e) {
         console.warn("Google Calendar sync skipped:", e?.message)
@@ -1608,7 +1624,7 @@ export default function App() {
 
       setTasks(current)
       await persist(current, calMap, null, mergedDeleted)
-      const parts = [added > 0 && `${added} neu`, updated > 0 && `${updated} aktualisiert`].filter(Boolean)
+      const parts = [added > 0 && `${added} neu`, updated > 0 && `${updated} aktualisiert`, pushed > 0 && `${pushed} zu Google übertragen`].filter(Boolean)
       // Only prompt for the secret on explicit 401 — not on timeout/network errors
       const wrongSecret = remoteErr === "api_unauthorized"
       const noSecret   = remoteErr === "no_secret"
