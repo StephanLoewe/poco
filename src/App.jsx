@@ -567,7 +567,7 @@ function layoutDay(dayTasks) {
 
 // A chip in the "Ungeplant" tray — long-press to lift, drag onto the
 // timeline to schedule it (assigns the dropped day + time).
-function UnscheduledChip({ task, dayAtX, scrollRef, onDrag, onSchedule, block }) {
+function UnscheduledChip({ task, dayAtX, scrollRef, onDrag, onSchedule, block, indent, caption }) {
   const lc  = LC[task.label] || LC.Arbeit
   const dur = task.duration || 30
   const [drag, setDrag] = useState(null)   // null | { x, y, time }
@@ -663,11 +663,13 @@ function UnscheduledChip({ task, dayAtX, scrollRef, onDrag, onSchedule, block })
         fontSize: 11, fontWeight: 600, color: lc.pastelText,
         background: lc.pastel, border: `1px solid ${lc.pastelBrd}`, borderRadius: 8,
         padding: "6px 10px", cursor: "grab", touchAction: drag ? "none" : "auto",
-        overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
+        overflow: "hidden", textOverflow: "ellipsis",
+        whiteSpace: caption ? "normal" : "nowrap",
         opacity: drag ? 0.35 : 1, userSelect: "none",
-        ...(block ? { width: "100%", flexShrink: 0 } : { flexShrink: 0, maxWidth: 160 }),
+        ...(block ? { width: indent ? "calc(100% - 16px)" : "100%", flexShrink: 0, marginLeft: indent ? 16 : 0 } : { flexShrink: 0, maxWidth: 160 }),
       }}>
-      {task.title}
+      <div style={{ overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{task.title}</div>
+      {caption && <div style={{ fontSize: 9, fontWeight: 500, opacity: 0.75, marginTop: 1, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>↳ {caption}</div>}
       {drag && (
         <div style={{ position: "fixed", left: drag.x, top: drag.y, transform: "translate(-50%, -130%)", zIndex: 999, pointerEvents: "none", background: lc.solid, color: "white", fontSize: 11, fontWeight: 600, padding: "5px 9px", borderRadius: 7, boxShadow: "0 8px 24px rgba(0,0,0,0.32)", whiteSpace: "nowrap", display: "flex", gap: 6, alignItems: "center" }}>
           <span style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis" }}>{task.title}</span>
@@ -689,8 +691,12 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
   const hasAllDay = days.some(d => tasks.some(t => t.date === dKey(d) && t.allDay))
   const [trayOpen, setTrayOpen]     = useState(true)
   const [dropTarget, setDropTarget] = useState(null)  // { dk, min, dur } during a tray drag
-  // Mirrors the Inbox (dateless, non-subtask, open) — drag one onto the timeline to schedule it
-  const unscheduled = showUnscheduled ? tasks.filter(t => !t.date && !t.parentId && t.status !== "done") : []
+  // All undated open tasks — top-level tasks AND subtasks — can be dragged onto the timeline
+  const unscheduled     = showUnscheduled ? tasks.filter(t => !t.date && t.status !== "done") : []
+  const unschedTop      = unscheduled.filter(t => !t.parentId)
+  const unschedChildren = (id) => unscheduled.filter(t => t.parentId === id)
+  // Undated subtasks whose parent is scheduled (not in the list) — shown standalone with a parent hint
+  const unschedOrphans  = unscheduled.filter(t => t.parentId && !unschedTop.some(p => p.id === t.parentId))
 
   // Resolve which day column sits under a given viewport X (for cross-day drag)
   const dayAtX = (clientX) => {
@@ -724,8 +730,12 @@ function MultiDayView({ tasks, date, numDays, dayWidth, onTaskClick, onTimeClick
           </div>
           <div style={{ flex: 1, overflowY: "auto", padding: "0 12px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
             {unscheduled.length === 0 && <div style={{ fontSize: 12, color: T.dim, padding: "6px 2px", lineHeight: 1.4 }}>Keine ungeplanten Aufgaben — auf den Kalender ziehen, um sie zu planen.</div>}
-            {unscheduled.map(t => (
-              <UnscheduledChip key={t.id} task={t} block dayAtX={dayAtX} scrollRef={ref} onDrag={setDropTarget} onSchedule={onSchedule} />
+            {unschedTop.flatMap(t => [
+              <UnscheduledChip key={t.id} task={t} block dayAtX={dayAtX} scrollRef={ref} onDrag={setDropTarget} onSchedule={onSchedule} />,
+              ...unschedChildren(t.id).map(c => <UnscheduledChip key={c.id} task={c} block indent dayAtX={dayAtX} scrollRef={ref} onDrag={setDropTarget} onSchedule={onSchedule} />),
+            ])}
+            {unschedOrphans.map(s => (
+              <UnscheduledChip key={s.id} task={s} block caption={tasks.find(p => p.id === s.parentId)?.title} dayAtX={dayAtX} scrollRef={ref} onDrag={setDropTarget} onSchedule={onSchedule} />
             ))}
           </div>
         </div>
