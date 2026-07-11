@@ -46,15 +46,17 @@ const store = {
   load() {
     try {
       return {
-        tasks:  JSON.parse(localStorage.getItem("sf-tasks")  || "null") ?? [],
-        cals:   JSON.parse(localStorage.getItem("sf-cals")   || "null") ?? {},
-        budget: JSON.parse(localStorage.getItem("sf-budget") || "null") ?? 8,
+        tasks:   JSON.parse(localStorage.getItem("sf-tasks")   || "null") ?? [],
+        cals:    JSON.parse(localStorage.getItem("sf-cals")    || "null") ?? {},
+        budget:  JSON.parse(localStorage.getItem("sf-budget")  || "null") ?? 8,
+        deleted: JSON.parse(localStorage.getItem("sf-deleted") || "null") ?? [],
       }
-    } catch { return { tasks: [], cals: {}, budget: 8 } }
+    } catch { return { tasks: [], cals: {}, budget: 8, deleted: [] } }
   },
-  tasks:  (v) => { try { localStorage.setItem("sf-tasks",  JSON.stringify(v)) } catch {} },
-  cals:   (v) => { try { localStorage.setItem("sf-cals",   JSON.stringify(v)) } catch {} },
-  budget: (v) => { try { localStorage.setItem("sf-budget", JSON.stringify(v)) } catch {} },
+  tasks:   (v) => { try { localStorage.setItem("sf-tasks",   JSON.stringify(v)) } catch {} },
+  cals:    (v) => { try { localStorage.setItem("sf-cals",    JSON.stringify(v)) } catch {} },
+  budget:  (v) => { try { localStorage.setItem("sf-budget",  JSON.stringify(v)) } catch {} },
+  deleted: (v) => { try { localStorage.setItem("sf-deleted", JSON.stringify(v)) } catch {} },
 }
 
 // ─── CalendarMapModal ─────────────────────────────────────────
@@ -1479,13 +1481,14 @@ export default function App() {
   // Persist to both localStorage (fast/offline) and the backend (cross-device).
   // localStorage write is synchronous and always succeeds; the backend is
   // best-effort with a timeout so a stalled request can never freeze the UI.
-  const persist = async (newTasks, newCals, newBudget) => {
-    const t = newTasks  ?? store.load().tasks
-    const c = newCals   ?? store.load().cals
-    const b = newBudget ?? store.load().budget
-    store.tasks(t); store.cals(c); store.budget(b)
+  const persist = async (newTasks, newCals, newBudget, newDeleted) => {
+    const t = newTasks   ?? store.load().tasks
+    const c = newCals    ?? store.load().cals
+    const b = newBudget  ?? store.load().budget
+    const d = newDeleted ?? store.load().deleted
+    store.tasks(t); store.cals(c); store.budget(b); store.deleted(d)
     if (!apiSecret()) return
-    try { await withTimeout(apiWrite({ tasks: t, cals: c, budget: b }), 12000) }
+    try { await withTimeout(apiWrite({ tasks: t, cals: c, budget: b, deleted: d }), 12000) }
     catch (e) { console.warn("Backend write:", e?.message); if (e.message === "api_unauthorized") setNeedsSecret(true) }
   }
 
@@ -1507,7 +1510,21 @@ export default function App() {
         remoteErr = "no_secret"
       }
       const remoteOk = !!remoteData
-      const localTasks = store.load().tasks
+      const localState = store.load()
+      const localTasks = localState.tasks
+      // Merge tombstones (user deletions) from this device + the backend, so a
+      // deleted task can't be resurrected by a re-import or another device.
+      const mergedDeleted = (() => {
+        const seen = new Set(); const out = []
+        const remoteDeleted = Array.isArray(remoteData?.deleted) ? remoteData.deleted : []
+        for (const d of [...remoteDeleted, ...localState.deleted]) {
+          if (!d || !d.id || seen.has(d.id)) continue
+          seen.add(d.id); out.push(d)
+        }
+        return out.slice(-500)
+      })()
+      const deletedIds     = new Set(mergedDeleted.map(d => d.id))
+      const deletedGcalIds = new Set(mergedDeleted.map(d => d.gcalId).filter(Boolean))
       // Merge: backend is source of truth for status/prio/energy, but keep any
       // local tasks the backend doesn't know yet (first sync on a new device)
       let base
@@ -1526,6 +1543,8 @@ export default function App() {
         if (seenGcal.has(t.gcalId)) return false
         seenGcal.add(t.gcalId); return true
       })
+      // Drop anything the user deleted (by app id or by Google event id)
+      base = base.filter(t => !deletedIds.has(t.id) && !(t.gcalId && deletedGcalIds.has(t.gcalId)))
       let current = [...base]; let added = 0; let updated = 0
 
       // Google Calendar sync is best-effort and must never block the backend
@@ -1547,6 +1566,7 @@ export default function App() {
           const evs = await gEvents(id, winStart.toISOString(), winEnd.toISOString())
           if (!Array.isArray(evs)) continue
           for (const ev of evs) {
+            if (deletedGcalIds.has(ev.id)) continue   // user deleted this event locally — don't re-import it
             const isAllDay = !ev.start?.dateTime
             const s = isAllDay
               ? new Date(ev.start.date + "T00:00:00")
@@ -1587,7 +1607,7 @@ export default function App() {
       }
 
       setTasks(current)
-      await persist(current, calMap)
+      await persist(current, calMap, null, mergedDeleted)
       const parts = [added > 0 && `${added} neu`, updated > 0 && `${updated} aktualisiert`].filter(Boolean)
       // Only prompt for the secret on explicit 401 — not on timeout/network errors
       const wrongSecret = remoteErr === "api_unauthorized"
@@ -1642,7 +1662,9 @@ export default function App() {
     const updated = tasks
       .filter(x => x.id !== id)
       .map(x => x.parentId === id ? { ...x, parentId: null } : x)
-    setTasks(updated); persist(updated)
+    // Tombstone the deletion so a Google re-import or another device can't resurrect it
+    const deleted = [...store.load().deleted, { id, gcalId: t?.gcalId || null, ts: Date.now() }].slice(-500)
+    setTasks(updated); persist(updated, null, null, deleted)
     setModal(null); showToast("Gelöscht")
   }
 
