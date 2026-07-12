@@ -1088,7 +1088,7 @@ function ListRow({ task, subStats, onClick, onToggleDone }) {
       {/* Info */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
-          fontSize: 15, fontWeight: 600, lineHeight: "21px",
+          fontSize: 15, fontWeight: 500, lineHeight: 1.3,
           color: done ? T.dim : T.text,
           textDecoration: done ? "line-through" : "none",
           overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
@@ -1098,8 +1098,8 @@ function ListRow({ task, subStats, onClick, onToggleDone }) {
         <div style={{ fontSize: 12, color: T.muted, marginTop: 2, display: "flex", alignItems: "center", gap: 0 }}>
           {meta.map((item, i) => (
             <span key={i}>
-              {i > 0 && <span style={{ color: T.dim, margin: "0 4px" }}>·</span>}
-              <span style={item === task.label ? { color: lc.pastelText, fontWeight: 500 } : item === dateLabel ? { color: "#EF4444", fontWeight: 500 } : {}}>
+              {i > 0 && <span style={{ color: T.dim, fontSize: 11, margin: "0 4px" }}>·</span>}
+              <span style={item === task.label ? { color: lc.pastelText } : item === dateLabel ? { color: "#EF4444", fontWeight: 500 } : {}}>
                 {item}
               </span>
             </span>
