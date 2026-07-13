@@ -387,6 +387,15 @@ function TaskBlock({ task, onClick, onReschedule, dayAtX, scrollRef, lane }) {
   const ht      = dPx(curDur)
   const tiny    = ht < 34
   const curTime = `${pad(Math.floor(curMin / 60) % 24)}:${pad(curMin % 60)}`
+
+  // Fixed 11px title — wraps onto more lines the taller the block is, then
+  // ellipsizes whatever still doesn't fit (single line for short blocks).
+  const padY       = tiny ? 2 : 5
+  const lineH      = 11 * 1.3
+  const contentH   = Math.max(0, ht - padY * 2)
+  const showTime   = !tiny && ht >= 44
+  const titleAreaH = Math.max(lineH, contentH - (showTime ? 14 : 0))
+  const maxLines   = Math.min(8, Math.max(1, Math.floor(titleAreaH / lineH)))
   const clearTimer = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null } }
   const stopAuto   = () => { autoDir.current = 0; if (autoRAF.current) { cancelAnimationFrame(autoRAF.current); autoRAF.current = null } }
 
@@ -496,10 +505,13 @@ function TaskBlock({ task, onClick, onReschedule, dayAtX, scrollRef, lane }) {
         transform: mode === "move" ? `translateX(${translateX}px) scale(1.03)` : "none",
       }}>
       <span style={{
-        fontSize: tiny ? 9 : 11, fontWeight: 500, color: "white",
-        overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
+        fontSize: 11, fontWeight: 500, color: "white",
+        overflow: "hidden", textOverflow: "ellipsis",
         width: "100%", textDecoration: done ? "line-through" : "none",
         lineHeight: 1.3,
+        ...(maxLines > 1
+          ? { display: "-webkit-box", WebkitLineClamp: maxLines, WebkitBoxOrient: "vertical", whiteSpace: "normal" }
+          : { whiteSpace: "nowrap" }),
       }}>
         {task.title}
       </span>
