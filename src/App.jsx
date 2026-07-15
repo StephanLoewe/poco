@@ -141,7 +141,7 @@ function TaskModal({ task, onSave, onDelete, onClose, allTasks = [], onAddSubtas
     date:     task.date !== undefined ? task.date : dKey(new Date()),
     time:     task.time !== undefined ? task.time : nowT(),
     duration: task.duration || 30,
-    label:    task.label    || "Arbeit",
+    label:    task.label    || "Tasks",
     priority: task.priority || "P3",
     energy:   task.energy   ?? 0,
     status:   task.status   || "open",
@@ -1147,7 +1147,7 @@ function InboxView({ tasks, onTaskClick, onAdd, onToggleDone }) {
   const handleAdd = () => {
     const title = input.trim()
     if (!title) return
-    onAdd({ title, date: "", time: "", duration: 30, label: "Arbeit", priority: "P3", energy: 0, status: "open" })
+    onAdd({ title, date: "", time: "", duration: 30, label: "Tasks", priority: "P3", energy: 0, status: "open" })
     setInput("")
   }
 
@@ -1735,7 +1735,7 @@ export default function App() {
 
   const handleAddSubtask = (parentId, title) => {
     const parent = tasks.find(t => t.id === parentId)
-    const t = { id: uid(), title, date: "", time: nowT(), duration: 30, label: parent?.label || "Arbeit", priority: "P3", energy: 0, status: "open", parentId }
+    const t = { id: uid(), title, date: "", time: nowT(), duration: 30, label: parent?.label || "Tasks", priority: "P3", energy: 0, status: "open", parentId }
     const updated = [...tasks, t]
     setTasks(updated); persist(updated)
   }
@@ -1785,7 +1785,7 @@ export default function App() {
                 onTaskClick={t => setModal({ task: t })}
                 onToggleDone={handleToggleDone}
                 onAdd={partial => {
-                  const t = { id: uid(), priority: "P3", energy: 0, status: "open", duration: 30, label: "Arbeit", time: nowT(), ...partial }
+                  const t = { id: uid(), priority: "P3", energy: 0, status: "open", duration: 30, label: "Tasks", time: nowT(), ...partial }
                   const updated = [...tasks, t]; setTasks(updated); store.tasks(updated)
                 }} />
             </div>
